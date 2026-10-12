@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoShorts — Open-source licenses</title>
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="stylesheet" href="fonts/fonts.css">
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #1c1733; color: #f5f2ff; font-family: 'Archivo Variable', 'Segoe UI', system-ui, sans-serif; line-height: 1.6; }
+    main { max-width: 760px; margin: 0 auto; padding: 48px 22px 80px; }
+    h1 { font-stretch: 62%; font-weight: 820; font-size: 52px; line-height: 1; margin: 0 0 20px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #342d5c; vertical-align: top; }
+    th { color: #aca5d2; font-weight: 600; font-size: 13px; }
+    td small { color: #8279b2; display: block; }
+    a { color: #ffd23f; }
+    p { color: #d8d3f0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Open-source licenses</h1>
+  <p>AutoShorts is built with these open-source projects. Thank you to their authors.</p>
+  <table>
+    <thead><tr><th>Component</th><th>Used for</th><th>License</th></tr></thead>
+    <tbody>
+      <tr><td><a href="https://huggingface.co/hexgrad/Kokoro-82M">Kokoro-82M</a><small>hexgrad</small></td><td>AI voice model (downloaded on first use)</td><td>Apache-2.0</td></tr>
+      <tr><td><a href="https://github.com/hexgrad/kokoro">kokoro-js</a><small>hexgrad, Xenova</small></td><td>Running the voice model in the app</td><td>Apache-2.0</td></tr>
+      <tr><td><a href="https://github.com/huggingface/transformers.js">Transformers.js</a><small>Hugging Face</small></td><td>Model loading</td><td>Apache-2.0</td></tr>
+      <tr><td><a href="https://github.com/microsoft/onnxruntime">ONNX Runtime Web</a><small>Microsoft</small></td><td>On-device inference</td><td>MIT</td></tr>
+      <tr><td><a href="https://github.com/xenova/phonemizer.js">phonemizer.js</a><small>Xenova, built on eSpeak NG</small></td><td>Turning text into speech sounds</td><td>Apache-2.0 (eSpeak NG: GPL-3.0)</td></tr>
+      <tr><td><a href="https://github.com/Vanilagy/mediabunny">Mediabunny</a><small>Vanilagy</small></td><td>MP4 writing and video decoding</td><td>MPL-2.0</td></tr>
+      <tr><td>Archivo, Montserrat, Anton, Bebas Neue, Bangers, Poppins, Space Mono<small>via Fontsource</small></td><td>Interface and caption fonts</td><td>SIL Open Font License 1.1</td></tr>
+    </tbody>
+  </table>
+  <p>Music in AutoShorts is generated on your device by the app itself. Stock footage (optional) is provided by <a href="https://www.pexels.com">Pexels</a> under the Pexels license. Facts for topics come from <a href="https://www.wikipedia.org">Wikipedia</a> (CC BY-SA 4.0).</p>
+</main>
+</body>
+</html>

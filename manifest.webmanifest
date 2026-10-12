@@ -1,0 +1,36 @@
+{
+  "id": "/AutoShorts/",
+  "name": "AutoShorts: Faceless Video & Creator Hub",
+  "short_name": "AutoShorts",
+  "description": "Turn a topic or an article into a faceless vertical video for TikTok, Reels and YouTube Shorts — AI voiceover, animated captions, background visuals and royalty-free music, made on your PC.",
+  "start_url": "/AutoShorts/",
+  "scope": "/AutoShorts/",
+  "display": "standalone",
+  "background_color": "#1C1733",
+  "theme_color": "#1C1733",
+  "lang": "en",
+  "dir": "ltr",
+  "orientation": "any",
+  "categories": ["photo", "video", "productivity", "entertainment"],
+  "prefer_related_applications": false,
+  "launch_handler": { "client_mode": "focus-existing" },
+  "icons": [
+    { "src": "icons/icon-48.png", "sizes": "48x48", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-72.png", "sizes": "72x72", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-128.png", "sizes": "128x128", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-144.png", "sizes": "144x144", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-384.png", "sizes": "384x384", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "screenshots/hub.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Type a topic and generate a faceless short" },
+    { "src": "screenshots/editor.png", "sizes": "1280x800", "type": "image/png", "form_factor": "wide", "label": "Edit scenes, captions, voice and music" }
+  ],
+  "shortcuts": [
+    { "name": "New video", "short_name": "New video", "url": "/AutoShorts/#/", "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }] }
+  ]
+}
