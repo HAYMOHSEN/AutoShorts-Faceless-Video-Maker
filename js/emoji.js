@@ -1,11 +1,15 @@
 // Keyword → emoji sticker map used for "faceless" visual cues on each scene.
 
+import { emojiForLang } from './emoji-langs.js';
+
 const MAP = {
   // science & space
   space: '🚀', rocket: '🚀', astronaut: '👩‍🚀', planet: '🪐', saturn: '🪐', jupiter: '🪐', mars: '🔴', earth: '🌍', world: '🌍',
   globe: '🌐', moon: '🌙', sun: '☀️', star: '⭐', stars: '✨', galaxy: '🌌', universe: '🌌', comet: '☄️', meteor: '☄️',
   asteroid: '☄️', telescope: '🔭', satellite: '🛰️', alien: '👽', ufo: '🛸', nasa: '🚀', gravity: '🍎', light: '💡',
   atom: '⚛️', physics: '⚛️', chemistry: '⚗️', science: '🔬', scientist: '🧑‍🔬', scientists: '🧑‍🔬', experiment: '🧪',
+  carbon: '🧪', chemical: '🧪', molecule: '🧪', molecules: '🧪', manuscript: '📜', codebreaker: '🔐',
+  sky: '🌤️', redwood: '🌲', redwoods: '🌲', sunlight: '☀️',
   lab: '🧪', research: '🔬', study: '📚', microscope: '🔬', dna: '🧬', gene: '🧬', genes: '🧬', cell: '🦠', cells: '🦠',
   virus: '🦠', bacteria: '🦠', magnet: '🧲', energy: '⚡', electricity: '⚡', battery: '🔋', volcano: '🌋', earthquake: '🌎',
   // body & health
@@ -96,8 +100,9 @@ const MAP = {
 
 const IRREGULAR = { mice: 'mouse', geese: 'goose', teeth: 'tooth', feet: 'foot', people: 'people', children: 'children', men: 'man', women: 'woman' };
 
-export function emojiFor(word) {
+export function emojiFor(word, lang = 'en') {
   if (!word) return '';
+  if (lang !== 'en') return emojiForLang(word, lang); // no English fallback: false friends (de "Gift", es "red")
   const w = String(word).toLowerCase().replace(/[^a-z]/g, '');
   if (!w) return '';
   if (MAP[w]) return MAP[w];
@@ -113,17 +118,30 @@ export function emojiFor(word) {
 }
 
 // Best emoji for a sentence: tries the scene keyword first, then every word.
-export function emojiForText(text, keyword) {
-  const k = emojiFor(keyword);
+export function emojiForText(text, keyword, lang = 'en') {
+  const k = emojiFor(keyword, lang);
   if (k) return k;
-  const words = String(text || '').toLowerCase().match(/[a-z]+/g) || [];
+  const words = lang === 'en' ? String(text || '').toLowerCase().match(/[a-z]+/g) || [] : String(text || '').toLocaleLowerCase().match(/[\p{L}\p{M}]+/gu) || [];
   // prefer longer, more specific words
   const sorted = [...new Set(words)].filter((w) => w.length > 2).sort((a, b) => b.length - a.length);
   for (const w of sorted) {
-    const e = emojiFor(w);
+    const e = emojiFor(w, lang);
     if (e) return e;
   }
   return '';
+}
+
+// emoji → an English word for it (the first word listed), to search stock footage in English
+let REVERSE = null;
+/** English search word for a word in another language, found through its emoji ("ऑक्टोपस" → "octopus"). */
+export function englishFor(word, lang) {
+  const e = emojiFor(word, lang);
+  if (!e) return '';
+  if (!REVERSE) {
+    REVERSE = new Map();
+    for (const [w, em] of Object.entries(MAP)) if (!REVERSE.has(em)) REVERSE.set(em, w);
+  }
+  return REVERSE.get(e) || '';
 }
 
 export const EMOJI_PICKS = ['🔥', '💡', '🤯', '😮', '✅', '❌', '⚠️', '💰', '📈', '🧠', '❤️', '⭐', '🚀', '🌍', '⏰', '🎯', '🏆', '😂', '🤫', '👀', '💪', '🐙', '🌊', '🍕', '☕', '📚', '🤖', '🎵'];

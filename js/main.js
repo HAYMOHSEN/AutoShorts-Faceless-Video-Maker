@@ -9,6 +9,7 @@ import { renderEditor } from './editor.js';
 import { openSettings } from './settings.js';
 import { openPro } from './pro.js';
 import { loadFonts } from './fonts.js';
+import { initI18n, t, tx } from './i18n.js';
 
 const view = document.getElementById('view');
 const bar = document.getElementById('appbar');
@@ -41,7 +42,7 @@ async function registerSW() {
       nw &&
         nw.addEventListener('statechange', () => {
           if (nw.state === 'installed' && navigator.serviceWorker.controller) {
-            toast('A new version of AutoShorts is ready.', { action: 'Restart', onAction: () => location.reload(), timeout: 12000 });
+            toast(t('A new version of AutoShorts is ready.'), { action: t('Restart'), onAction: () => location.reload(), timeout: 12000 });
           }
         });
     });
@@ -53,18 +54,18 @@ async function registerSW() {
 // ---------------------------------------------------------------- app bar
 function renderBar() {
   clear(bar);
-  const brand = h('button', { class: 'brand', 'aria-label': 'AutoShorts home', on: { click: () => navigate('#/') } }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'AutoShorts');
+  const brand = h('button', { class: 'brand', 'aria-label': t('AutoShorts home'), on: { click: () => navigate('#/') } }, h('span', { class: 'brand-mark', 'aria-hidden': 'true' }), 'AutoShorts');
   const q = h('span', { class: 'quota' });
   const proBtn = license.pro
-    ? h('button', { class: 'btn small pro', on: { click: () => openPro() } }, icon('crown', 14), 'Pro')
-    : h('button', { class: 'btn small pro', on: { click: () => openPro() } }, icon('crown', 14), 'Get Pro');
-  const settings = h('button', { class: 'btn icon ghost', 'aria-label': 'Settings', title: 'Settings', on: { click: () => openSettings() } }, icon('settings', 19));
+    ? h('button', { class: 'btn small pro', on: { click: () => openPro() } }, icon('crown', 14), t('Pro'))
+    : h('button', { class: 'btn small pro', on: { click: () => openPro() } }, icon('crown', 14), t('Get Pro'));
+  const settings = h('button', { class: 'btn icon ghost', 'aria-label': t('Settings'), title: t('Settings'), on: { click: () => openSettings() } }, icon('settings', 19));
   bar.append(brand, h('span', { class: 'spacer' }), q, proBtn, settings);
   if (!license.pro) {
     quota().then((x) => {
-      q.replaceChildren(h('b', { text: String(x.left) }), ` of ${x.limit} free exports left this week`);
+      q.replaceChildren(...tx('{left} of {limit} free exports left this week', { left: h('b', { text: String(x.left) }), limit: x.limit, n: x.limit }));
     });
-  } else q.textContent = 'Unlimited HD exports';
+  } else q.textContent = t('Unlimited HD exports');
 }
 
 // ---------------------------------------------------------------- routing
@@ -92,17 +93,17 @@ async function route() {
   let dispose;
   try {
     if (m) {
-      document.title = 'AutoShorts — Editor';
+      document.title = `AutoShorts — ${t('Editor')}`;
       dispose = await renderEditor(host, m[1], ctx);
     } else {
-      document.title = 'AutoShorts — Faceless video maker';
+      document.title = `AutoShorts – ${t('Faceless Video Maker')}`;
       dispose = await renderHub(host, ctx);
     }
   } catch (e) {
     console.error(e);
     if (token === routeToken) {
       host.replaceChildren(
-        h('div', { class: 'hub' }, h('div', { class: 'empty' }, h('strong', { text: 'This page could not be opened' }), h('span', { text: e.message || String(e) }), h('button', { class: 'btn', on: { click: () => navigate('#/') } }, 'Back to my videos')))
+        h('div', { class: 'hub' }, h('div', { class: 'empty' }, h('strong', { text: t('This page could not be opened') }), h('span', { text: t(e.message || String(e)) }), h('button', { class: 'btn', on: { click: () => navigate('#/') } }, t('Back to my videos'))))
       );
     }
     return;
@@ -137,6 +138,7 @@ function scheduleCleanup() {
 async function boot() {
   registerSW();
   requestPersistence();
+  await initI18n();
   await loadFonts();
   await initLicense();
   renderBar();
@@ -144,8 +146,8 @@ async function boot() {
   document.addEventListener('open-settings', (e) => openSettings(e.detail || ''));
   document.addEventListener('quota-changed', renderBar);
   window.addEventListener('hashchange', route);
-  window.addEventListener('online', () => toast('Back online'));
-  window.addEventListener('offline', () => toast('You’re offline. Everything already downloaded keeps working.'));
+  window.addEventListener('online', () => toast(t('Back online')));
+  window.addEventListener('offline', () => toast(t('You’re offline. Everything already downloaded keeps working.')));
   await route();
   document.body.classList.add('ready');
   scheduleCleanup();
@@ -153,5 +155,5 @@ async function boot() {
 
 boot().catch((e) => {
   console.error(e);
-  view.replaceChildren(h('div', { class: 'hub' }, h('div', { class: 'empty' }, h('strong', { text: 'AutoShorts could not start' }), h('span', { text: e.message || String(e) }))));
+  view.replaceChildren(h('div', { class: 'hub' }, h('div', { class: 'empty' }, h('strong', { text: t('AutoShorts could not start') }), h('span', { text: e.message || String(e) }))));
 });

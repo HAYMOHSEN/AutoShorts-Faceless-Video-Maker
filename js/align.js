@@ -7,13 +7,16 @@ const FRAME = 0.01; // 10 ms analysis frames
 export function syllables(word) {
   const w = String(word).toLowerCase();
   if (/[؀-ۿ]/.test(w)) return Math.max(1, Math.round(w.replace(/[^؀-ۿ]/g, '').length / 2));
+  // Devanagari: one syllable per consonant (not silenced by a virama) or independent vowel
+  if (/[\u0900-\u097F]/.test(w)) return Math.max(1, (w.match(/[\u0905-\u0914]|[\u0915-\u0939\u0958-\u095F](?!\u094D)/g) || []).length);
   if (/\d/.test(w)) {
     const digits = w.replace(/[^0-9]/g, '').length;
     let s = Math.max(2, Math.round(digits * 1.6));
     if (/%/.test(w)) s += 2;
     return s;
   }
-  const clean = w.replace(/[^a-z]/g, '');
+  // accented Latin (é, ü, ã…) counts like its plain vowel
+  const clean = w.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/œ/g, 'oe').replace(/æ/g, 'ae').replace(/ß/g, 'ss').replace(/[^a-z]/g, '');
   if (!clean) return 1;
   if (clean.length <= 3) return 1;
   const groups = clean.replace(/(?:[^laeiouy]es|ed|[^laeiouy]e)$/, '').replace(/^y/, '').match(/[aeiouy]{1,2}/g);
@@ -105,7 +108,7 @@ export function alignWords(text, pcm, sr) {
   let cur = [];
   words.forEach((w, i) => {
     cur.push(i);
-    if (/[,.;:!?…—–؟،]["')\]]*$/.test(w) && i < words.length - 1) {
+    if (/[,.;:!?…—–؟،؛।]["'»”)\]]*$/.test(w) && i < words.length - 1) {
       phrases.push(cur);
       cur = [];
     }
@@ -236,7 +239,7 @@ function alignSegment(words, mask, a, b) {
 /** Even spread for scenes that have no audio (captions-only videos). */
 export function estimateWords(text, duration, offset = 0) {
   const words = splitWords(text);
-  const weights = words.map((w) => syllables(w) + (/[,.;:!?]$/.test(w) ? 1.2 : 0));
+  const weights = words.map((w) => syllables(w) + (/[,.;:!?،؛؟।]$/.test(w) ? 1.2 : 0));
   const total = weights.reduce((x, y) => x + y, 0) || 1;
   let t = offset;
   return words.map((w, i) => {

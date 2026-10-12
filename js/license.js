@@ -4,11 +4,12 @@
 
 import { kvGet, kvSet } from './db.js';
 import { isoWeekKey, nextMonday } from './util.js';
+import { N_, t, uiLocale } from './i18n.js';
 
 export const PRODUCTS = [
-  { id: 'autoshorts_pro_lifetime', label: 'Pro forever', note: 'One-time purchase' },
-  { id: 'autoshorts_pro_yearly', label: 'Pro yearly', note: 'Renews every year' },
-  { id: 'autoshorts_pro_monthly', label: 'Pro monthly', note: 'Renews every month' },
+  { id: 'autoshorts_pro_lifetime', label: N_('Pro forever'), note: N_('One-time purchase') },
+  { id: 'autoshorts_pro_yearly', label: N_('Pro yearly'), note: N_('Renews every year') },
+  { id: 'autoshorts_pro_monthly', label: N_('Pro monthly'), note: N_('Renews every month') },
 ];
 export const FREE_EXPORTS_PER_WEEK = 3;
 const STORE_BILLING = 'https://store.microsoft.com/billing';
@@ -108,7 +109,7 @@ export async function refreshLicense() {
 
 export async function purchase(itemId) {
   const svc = await service();
-  if (!svc) throw new Error('Purchases are available in the Microsoft Store version of AutoShorts.');
+  if (!svc) throw new Error(t('Purchases are available in the Microsoft Store version of AutoShorts.'));
   const methods = [{ supportedMethods: STORE_BILLING, data: { sku: itemId } }];
   let request;
   try {
@@ -136,7 +137,7 @@ export function priceOf(itemId) {
   const d = state.details.find((x) => x.itemId === itemId);
   if (!d || !d.price) return '';
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: d.price.currency }).format(Number(d.price.value));
+    return new Intl.NumberFormat(uiLocale(), { style: 'currency', currency: d.price.currency }).format(Number(d.price.value));
   } catch {
     return `${d.price.value} ${d.price.currency}`;
   }
@@ -162,7 +163,7 @@ export async function recordExport() {
 
 export function resetText(date) {
   const days = Math.max(1, Math.round((date - new Date()) / 86400000));
-  return days <= 1 ? 'Resets tomorrow' : `Resets in ${days} days`;
+  return days <= 1 ? t('Resets tomorrow') : t('Resets in {n} days', { n: days });
 }
 
 /** Free items are always usable; everything else needs Pro. */

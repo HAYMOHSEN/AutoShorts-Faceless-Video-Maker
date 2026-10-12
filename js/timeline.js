@@ -28,7 +28,7 @@ export function buildTimeline(project, clips) {
     const clip = voiceOn ? clips.get(sc.id) || null : null;
     let start = i === 0 ? 0.12 : t + gap;
     if (snap && i > 0) start = Math.ceil((start - 1e-6) / grid) * grid;
-    const dur = clip ? clip.duration : estimateSeconds(sc.text, speed);
+    const dur = clip ? clip.duration : estimateSeconds(sc.text, speed, project.lang);
     const words = clip && clip.words && clip.words.length
       ? clip.words.map((w) => ({ w: w.w, start: start + w.start, end: start + w.end }))
       : estimateWords(sc.text, dur, start);

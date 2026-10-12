@@ -4,6 +4,12 @@
 //  - Wikipedia, for facts about a typed topic (needs a connection)
 
 import { kvGet } from './db.js';
+import { langMeta, normLang, pack } from './langs.js';
+import { topicPhrase } from './script.js';
+import { t } from './i18n.js';
+
+// how the writer is told which language to use
+const WRITE_IN = { en: 'English', es: 'Spanish', fr: 'French', de: 'German', pt: 'Brazilian Portuguese', hi: 'Hindi, written in Devanagari script', ar: 'Modern Standard Arabic' };
 
 const FORMAT_HINT = {
   facts: 'surprising "did you know" facts',
@@ -14,15 +20,18 @@ const FORMAT_HINT = {
   motivation: 'short, punchy motivational lessons',
 };
 
-function buildPrompt({ mode, input, format, seconds }) {
-  const words = Math.round(seconds * 2.6);
+function buildPrompt({ mode, input, format, seconds, lang = 'en' }) {
+  lang = normLang(lang);
+  const words = Math.round(seconds * langMeta(lang).wps);
   const lines = Math.max(4, Math.round(seconds / 4.5));
+  const P = pack(lang);
+  const listHint = lang === 'en' ? FORMAT_HINT.list : `a numbered top list (start body lines with "${P.ordinals[0]}", "${P.ordinals[1]}" …)`;
   const base = [
     `Write the voiceover script for a ${seconds}-second vertical short video (TikTok / Reels / YouTube Shorts).`,
-    `Style: ${FORMAT_HINT[format] || FORMAT_HINT.facts}.`,
+    `Style: ${format === 'list' ? listHint : FORMAT_HINT[format] || FORMAT_HINT.facts}.`,
     `Rules: about ${words} words in total, ${lines} to ${lines + 2} lines, one spoken sentence per line, at most 18 words per line.`,
     'The first line is a scroll-stopping hook (max 12 words). The last line is a short call to action (follow, comment or save).',
-    'Plain spoken English. Only include facts you are confident are true. No emojis, no hashtags, no stage directions, no line numbers, no quotation marks, no title.',
+    `Write every line in natural, spoken ${WRITE_IN[lang]}${lang === 'en' ? '' : ', even if the topic or the article is in another language'}. Only include facts you are confident are true. No emojis, no hashtags, no stage directions, no line numbers, no quotation marks, no title.`,
     'Output only the lines, one per line.',
   ];
   if (mode === 'article') base.push('', 'Base every fact only on this article:', '"""', String(input).slice(0, 7000), '"""');
@@ -44,12 +53,16 @@ function lm() {
   return null;
 }
 
-export async function onDeviceStatus() {
+// The built-in model only writes some languages (Chrome: English, Spanish, Japanese); the
+// built-in writer covers the others.
+export async function onDeviceStatus(lang = 'en') {
   const L = lm();
   if (!L || !L.availability) return 'unavailable';
+  lang = normLang(lang);
   try {
-    return await L.availability({ expectedOutputs: [{ type: 'text', languages: ['en'] }] });
+    return await L.availability({ expectedInputs: [{ type: 'text', languages: [lang] }], expectedOutputs: [{ type: 'text', languages: [lang] }] });
   } catch {
+    if (lang !== 'en') return 'unavailable';
     try {
       return await L.availability();
     } catch {
@@ -60,11 +73,13 @@ export async function onDeviceStatus() {
 
 export async function writeOnDevice(opts, { signal, onProgress } = {}) {
   const L = lm();
-  if (!L) throw new Error('On-device AI is not available on this PC.');
+  if (!L) throw new Error(t('On-device AI is not available on this PC.'));
+  const lang = normLang(opts.lang);
   const session = await L.create({
     signal,
     initialPrompts: [{ role: 'system', content: 'You write short, accurate, engaging voiceover scripts for vertical videos.' }],
-    expectedOutputs: [{ type: 'text', languages: ['en'] }],
+    expectedInputs: [{ type: 'text', languages: [lang] }],
+    expectedOutputs: [{ type: 'text', languages: [lang] }],
     monitor(m) {
       m.addEventListener('downloadprogress', (e) => onProgress && onProgress(e.loaded));
     },
@@ -86,7 +101,7 @@ export async function remoteConfig() {
 
 export async function writeRemote(opts, { signal } = {}) {
   const cfg = await remoteConfig();
-  if (!cfg.enabled) throw new Error('No AI writer is set up.');
+  if (!cfg.enabled) throw new Error(t('No AI writer is set up.'));
   const url = cfg.baseUrl.replace(/\/+$/, '') + '/chat/completions';
   const res = await fetch(url, {
     method: 'POST',
@@ -102,9 +117,9 @@ export async function writeRemote(opts, { signal } = {}) {
     }),
   });
   if (!res.ok) {
-    let msg = `The AI writer returned an error (${res.status}).`;
-    if (res.status === 401) msg = 'The AI writer rejected the API key. Check it in Settings.';
-    if (res.status === 429) msg = 'The AI writer is rate-limited right now. Try again in a minute.';
+    let msg = t('The AI writer returned an error ({status}).', { status: res.status });
+    if (res.status === 401) msg = t('The AI writer rejected the API key. Check it in Settings.');
+    if (res.status === 429) msg = t('The AI writer is rate-limited right now. Try again in a minute.');
     throw new Error(msg);
   }
   const json = await res.json();
@@ -119,7 +134,7 @@ export async function testRemote(cfg) {
     headers: { 'Content-Type': 'application/json', ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}) },
     body: JSON.stringify({ model: cfg.model, max_tokens: 5, messages: [{ role: 'user', content: 'Reply with OK.' }] }),
   });
-  if (!res.ok) throw new Error(`Error ${res.status}`);
+  if (!res.ok) throw new Error(t('Error {status}', { status: res.status }));
   return true;
 }
 
@@ -127,17 +142,29 @@ export async function testRemote(cfg) {
 
 const WIKI_HEADERS = { 'Api-User-Agent': 'AutoShorts/1.0 (https://haymohsen.github.io/AutoShorts/)' };
 
-export async function wikipediaFacts(query, { signal, lang = 'en' } = {}) {
-  const q = String(query || '')
-    .replace(/[?!.]+$/, '')
-    .replace(/^(why|how|what|where|when|who)\s+(is|are|was|were|do|does|did|can)?\s*/i, '')
-    .trim();
+// search words for a typed topic: the question without its question words, then just its key words
+function wikiQueries(query, lang) {
+  const raw = String(query || '').trim();
+  if (lang === 'en') {
+    const q = raw
+      .replace(/[?!.]+$/, '')
+      .replace(/^(why|how|what|where|when|who)\s+(is|are|was|were|do|does|did|can)?\s*/i, '')
+      .trim();
+    return [q || raw];
+  }
+  const P = pack(lang);
+  let q = raw.replace(/[¿¡]/g, '').replace(/[?!.؟।]+$/, '').trim();
+  if (P.questionStart && lang !== 'hi') q = q.replace(P.questionStart, '').trim();
+  return [...new Set([q, topicPhrase(raw, lang)].filter(Boolean))];
+}
+
+async function wikiSearch(q, lang, signal) {
   const params = new URLSearchParams({
     action: 'query',
     format: 'json',
     origin: '*',
     generator: 'search',
-    gsrsearch: q || query,
+    gsrsearch: q,
     gsrlimit: '1',
     prop: 'extracts|info',
     inprop: 'url',
@@ -145,13 +172,23 @@ export async function wikipediaFacts(query, { signal, lang = 'en' } = {}) {
     exsectionformat: 'plain',
     redirects: '1',
   });
-  const res = await fetch(`https://${lang}.wikipedia.org/w/api.php?${params}`, { signal, headers: WIKI_HEADERS });
-  if (!res.ok) throw new Error('Wikipedia is not reachable right now.');
+  const res = await fetch(`https://${langMeta(lang).wiki}.wikipedia.org/w/api.php?${params}`, { signal, headers: WIKI_HEADERS });
+  if (!res.ok) throw new Error(t('Wikipedia is not reachable right now.'));
   const json = await res.json();
   const pages = json && json.query && json.query.pages ? Object.values(json.query.pages) : [];
-  const page = pages[0];
-  if (!page || !page.extract) throw new Error('No facts found for this topic.');
+  return pages[0] && pages[0].extract ? pages[0] : null;
+}
+
+export async function wikipediaFacts(query, { signal, lang = 'en' } = {}) {
+  lang = normLang(lang);
+  let page = null;
+  for (const q of wikiQueries(query, lang)) {
+    page = await wikiSearch(q, lang, signal);
+    if (page) break;
+  }
+  if (!page) throw new Error(t('No facts found for this topic.'));
   // drop reference-like sections
-  const text = page.extract.split(/\n\s*(See also|References|External links|Further reading|Notes|Bibliography|Sources)\s*\n/)[0];
-  return { title: page.title, text, url: page.fullurl || `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title)}` };
+  const text = page.extract.split(new RegExp(`\\n\\s*(${pack(lang).wikiEnd})\\s*\\n`))[0];
+  const host = `https://${langMeta(lang).wiki}.wikipedia.org`;
+  return { title: page.title, text, url: page.fullurl || `${host}/wiki/${encodeURIComponent(page.title)}` };
 }

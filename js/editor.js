@@ -21,11 +21,13 @@ import { buildInspector } from './inspector.js';
 import { openExport } from './exportflow.js';
 import { openRecorder } from './recorder.js';
 import { license } from './license.js';
+import { t, N_, fmtNum, joinList } from './i18n.js';
+import { langMeta, pack } from './langs.js';
 
 export async function renderEditor(root, id, ctx) {
   const project = await loadProject(id);
   if (!project) {
-    toast('That video could not be found.');
+    toast(t('That video could not be found.'));
     ctx.navigate('#/');
     return () => {};
   }
@@ -34,7 +36,7 @@ export async function renderEditor(root, id, ctx) {
   return () => ed.dispose();
 }
 
-const KIND_LABEL = { hook: 'Hook', body: 'Scene', cta: 'Call to action' };
+const KIND_LABEL = { hook: N_('Hook'), body: N_('Scene'), cta: N_('Call to action') };
 
 export class Editor {
   constructor(root, project, ctx) {
@@ -65,7 +67,7 @@ export class Editor {
 
   // ------------------------------------------------------------------ lifecycle
   async init() {
-    await loadFonts();
+    await loadFonts(this.project.lang);
     this.media = new PreviewMedia(() => {
       if (this.player && !this.player.playing) this.player.draw();
     });
@@ -135,8 +137,19 @@ export class Editor {
     c.height = 480;
     const r = new Renderer(c);
     r.setData({ ...this.renderData(), watermark: false });
-    const t = Math.min(this.timeline.duration - 0.1, (this.timeline.scenes[0]?.end || 2) * 0.7);
-    this.project.thumb = snapshot(r, t, 216);
+    let at = Math.min(this.timeline.duration - 0.1, (this.timeline.scenes[0]?.end || 2) * 0.7);
+    // land on a settled caption, not on a word that is still popping in (the renderer shows the
+    // last caption that has started, so look it up the same way)
+    const chunks = this.chunks || [];
+    const idx = chunks.findLastIndex((c) => c.start <= at);
+    const chunk = chunks[idx];
+    if (chunk && at < chunk.end) {
+      const shownUntil = Math.min(chunk.end, chunks[idx + 1] ? chunks[idx + 1].start : Infinity);
+      const word = chunk.words.findLast((w) => w.start <= at) || chunk.words[0];
+      const begin = Math.max(chunk.start, word.start);
+      if (at - begin < 0.25) at = Math.max(at, Math.min(shownUntil - 0.02, begin + 0.25));
+    }
+    this.project.thumb = snapshot(r, at, 216);
     this.save();
   }
 
@@ -214,10 +227,10 @@ export class Editor {
       } while (this.voiceAgain && !this.disposed);
     } catch (e) {
       console.warn(e);
-      this.voiceError = e.message || 'The voice engine stopped.';
+      this.voiceError = e.message || t('The voice engine stopped.');
       this.voiceBusy.clear();
       this.renderScenes();
-      toast(`Voice: ${this.voiceError}`, { kind: 'error', action: 'Retry', onAction: () => this.runVoiceQueue(), timeout: 9000 });
+      toast(t('Voice: {error}', { error: this.voiceError }), { kind: 'error', action: t('Retry'), onAction: () => this.runVoiceQueue(), timeout: 9000 });
     } finally {
       this.voiceRunning = false;
       this.setStatus();
@@ -240,7 +253,7 @@ export class Editor {
 
   async recordScene(i) {
     const sc = this.project.scenes[i];
-    const result = await openRecorder(sc.text);
+    const result = await openRecorder(sc.text, this.project.lang);
     if (!result) return;
     const id = uid('r_');
     const clip = await storeClip(id, sc.text, result.pcm, result.sampleRate, 'mic');
@@ -285,7 +298,7 @@ export class Editor {
         try {
           buf = await ctx.decodeAudioData(await a.blob.arrayBuffer());
         } catch {
-          throw new Error('Your music file couldn’t be read. Choose another track in Music, or turn music off.');
+          throw new Error(t('Your music file couldn’t be read. Choose another track in Music, or turn music off.'));
         }
         this.customMusic = { id: m.customAssetId, buf };
       }
@@ -384,7 +397,8 @@ export class Editor {
     clear(this.root);
     const p = this.project;
     // top bar
-    this.titleInput = h('input', { class: 'ed-title', type: 'text', value: p.title, 'aria-label': 'Video title', maxlength: 120 });
+    const L = langMeta(p.lang);
+    this.titleInput = h('input', { class: 'ed-title', type: 'text', value: p.title, 'aria-label': t('Video title'), maxlength: 120, lang: L.id, dir: 'auto' });
     this.titleInput.addEventListener('input', () => {
       p.title = this.titleInput.value;
       this.renderer.setData(this.renderData());
@@ -392,37 +406,38 @@ export class Editor {
       this.save();
     });
     this.statusEl = h('span', { class: 'ed-status', role: 'status' });
-    this.exportBtn = h('button', { class: 'btn primary', on: { click: () => this.openExport() } }, icon('download'), 'Export MP4');
-    const back = h('button', { class: 'btn ghost', on: { click: () => this.ctx.navigate('#/') } }, icon('back'), 'Videos');
+    this.exportBtn = h('button', { class: 'btn primary', on: { click: () => this.openExport() } }, icon('download'), t('Export MP4'));
+    const back = h('button', { class: 'btn ghost', on: { click: () => this.ctx.navigate('#/') } }, icon('back'), t('Videos'));
     const top = h('div', { class: 'ed-top' }, back, this.titleInput, h('span', { class: 'spacer' }), this.statusEl, this.exportBtn);
 
     // scenes
-    this.sceneList = h('ol', { class: 'scene-list', 'aria-label': 'Scenes' });
+    this.sceneList = h('ol', { class: 'scene-list', 'aria-label': t('Scenes') });
     this.sceneMeta = h('span', { class: 'meta' });
-    const addBtn = h('button', { class: 'btn small add-scene', on: { click: () => this.addScene(this.project.scenes.length - 1) } }, icon('plus', 15), 'Add scene');
-    const scenes = h('aside', { class: 'scenes' }, h('div', { class: 'panel-head' }, h('h3', { text: 'Scenes' }), this.sceneMeta), this.sceneList, addBtn);
+    const addBtn = h('button', { class: 'btn small add-scene', on: { click: () => this.addScene(this.project.scenes.length - 1) } }, icon('plus', 15), t('Add scene'));
+    const scenes = h('aside', { class: 'scenes' }, h('div', { class: 'panel-head' }, h('h3', { text: t('Scenes') }), this.sceneMeta), this.sceneList, addBtn);
 
     // stage
-    this.canvas = h('canvas', { 'aria-label': 'Video preview' });
+    this.canvas = h('canvas', { 'aria-label': t('Video preview') });
     this.phone = h('div', { class: 'phone' }, this.canvas);
-    this.playBtn = h('button', { class: 'btn icon', 'aria-label': 'Play', title: 'Play (Space)', on: { click: () => this.player.toggle() } }, icon('play'));
+    this.playBtn = h('button', { class: 'btn icon', 'aria-label': t('Play'), title: t('Play (Space)'), on: { click: () => this.player.toggle() } }, icon('play'));
     this.timeEl = h('span', { class: 'time', text: '0:00 / 0:00' });
-    this.scrub = h('input', { type: 'range', min: 0, max: 1000, value: 0, 'aria-label': 'Position' });
+    this.scrub = h('input', { type: 'range', min: 0, max: 1000, value: 0, 'aria-label': t('Position') });
     this.scrub.addEventListener('input', () => this.player.seek((this.scrub.value / 1000) * (this.timeline ? this.timeline.duration : 0)));
-    this.safeBtn = h('button', { class: 'btn icon', 'aria-label': 'Show app safe zones', title: 'Show where TikTok and Shorts buttons sit', 'aria-pressed': 'false' }, icon('safe'));
+    this.safeBtn = h('button', { class: 'btn icon', 'aria-label': t('Show app safe zones'), title: t('Show where TikTok and Shorts buttons sit'), 'aria-pressed': 'false' }, icon('safe'));
     this.safeBtn.addEventListener('click', () => {
       this.renderer.safeZones = !this.renderer.safeZones;
       this.safeBtn.setAttribute('aria-pressed', String(this.renderer.safeZones));
       this.safeBtn.classList.toggle('primary', this.renderer.safeZones);
       this.player.draw();
     });
-    this.strip = h('div', { class: 'strip', 'aria-label': 'Timeline' });
+    // time runs left to right in every language
+    this.strip = h('div', { class: 'strip', 'aria-label': t('Timeline'), dir: 'ltr' });
     this.head = h('div', { class: 'head' });
     const stage = h(
       'section',
       { class: 'stage' },
       h('div', { class: 'monitor' }, this.phone),
-      h('div', { class: 'transport' }, this.playBtn, this.timeEl, this.scrub, this.safeBtn),
+      h('div', { class: 'transport', dir: 'ltr' }, this.playBtn, this.timeEl, this.scrub, this.safeBtn),
       this.strip
     );
 
@@ -432,12 +447,12 @@ export class Editor {
 
     this.renderer = new Renderer(this.canvas);
     this.player = new Player({
-      draw: (t) => this.drawFrame(t),
-      onTime: (t) => this.onTime(t),
+      draw: (time) => this.drawFrame(time),
+      onTime: (time) => this.onTime(time),
       onState: (playing) => {
         this.renderer.playing = playing;
         this.playBtn.replaceChildren(icon(playing ? 'pause' : 'play'));
-        this.playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
+        this.playBtn.setAttribute('aria-label', playing ? t('Pause') : t('Play'));
         if (!playing) this.media.pauseAll();
       },
     });
@@ -469,18 +484,18 @@ export class Editor {
     }
   }
 
-  drawFrame(t) {
+  drawFrame(time) {
     if (!this.timeline) return;
-    this.renderer.draw(t);
+    this.renderer.draw(time);
   }
 
-  onTime(t) {
+  onTime(time) {
     if (!this.timeline) return;
     const d = this.timeline.duration;
-    this.timeEl.textContent = `${fmtTime(t)} / ${fmtTime(d)}`;
-    if (document.activeElement !== this.scrub) this.scrub.value = String(Math.round((t / Math.max(0.01, d)) * 1000));
-    this.head.style.left = `${(t / Math.max(0.01, d)) * 100}%`;
-    const i = sceneAt(this.timeline, t);
+    this.timeEl.textContent = `${fmtTime(time)} / ${fmtTime(d)}`;
+    if (document.activeElement !== this.scrub) this.scrub.value = String(Math.round((time / Math.max(0.01, d)) * 1000));
+    this.head.style.left = `${(time / Math.max(0.01, d)) * 100}%`;
+    const i = sceneAt(this.timeline, time);
     if (i !== this.playingIndex) {
       this.playingIndex = i;
       [...this.sceneList.children].forEach((li, k) => li.classList.toggle('playing', k === i));
@@ -495,20 +510,21 @@ export class Editor {
     const mode = this.project.settings.voice.mode;
     if (mode === 'ai' && s.status === 'loading') {
       const pct = s.total ? Math.round(s.progress * 100) : null;
-      this.statusEl.append(pct != null ? `Downloading AI voices ${pct}%` : 'Starting the voice engine', h('span', { class: 'bar' }, h('i', { style: { width: `${pct || 5}%` } })));
+      const label = pct == null ? t('Starting the voice engine') : s.kind === 'piper' ? t('Downloading the voice {name} {pct}%', { name: s.voiceName, pct }) : t('Downloading AI voices {pct}%', { pct });
+      this.statusEl.append(label, h('span', { class: 'bar' }, h('i', { style: { width: `${pct || 5}%` } })));
       return;
     }
     if (mode === 'ai' && this.voiceRunning && this.voiceTotal) {
       const done = this.voiceDone || 0;
-      this.statusEl.append(`Creating voiceover ${Math.min(done + 1, this.voiceTotal)} of ${this.voiceTotal}`, h('span', { class: 'bar' }, h('i', { style: { width: `${Math.round((done / this.voiceTotal) * 100)}%` } })));
+      this.statusEl.append(t('Creating voiceover {i} of {total}', { i: Math.min(done + 1, this.voiceTotal), total: this.voiceTotal }), h('span', { class: 'bar' }, h('i', { style: { width: `${Math.round((done / this.voiceTotal) * 100)}%` } })));
       return;
     }
     if (mode === 'ai' && this.voiceError) {
-      const retry = h('button', { class: 'btn small', on: { click: () => this.runVoiceQueue() } }, icon('refresh', 14), 'Retry voice');
-      this.statusEl.append('Voice not ready', retry);
+      const retry = h('button', { class: 'btn small', on: { click: () => this.runVoiceQueue() } }, icon('refresh', 14), t('Retry voice'));
+      this.statusEl.append(t('Voice not ready'), retry);
       return;
     }
-    this.statusEl.append(this.lastSaved ? 'Saved on this PC' : '');
+    this.statusEl.append(this.lastSaved ? t('Saved on this PC') : '');
   }
 
   // ------------------------------------------------------------------ scenes panel
@@ -533,33 +549,34 @@ export class Editor {
   voiceTag(sc) {
     const mode = this.project.settings.voice.mode;
     if (mode === 'none') return null;
-    if (this.voiceBusy.has(sc.id)) return h('span', { class: 'tag voice-busy', text: 'Voicing…' });
-    if (this.clipFresh(sc)) return h('span', { class: 'tag voice-ok', title: 'Voice ready', text: 'Voice ✓' });
-    if (mode === 'mic') return h('span', { class: 'tag voice-missing', title: 'Use the microphone button to record this line', text: 'No take' });
-    return h('span', { class: 'tag voice-busy', text: this.voiceError ? 'Voice failed' : 'Queued' });
+    if (this.voiceBusy.has(sc.id)) return h('span', { class: 'tag voice-busy', text: t('Voicing…') });
+    if (this.clipFresh(sc)) return h('span', { class: 'tag voice-ok', title: t('Voice ready'), text: t('Voice ✓') });
+    if (mode === 'mic') return h('span', { class: 'tag voice-missing', title: t('Use the microphone button to record this line'), text: t('No take') });
+    return h('span', { class: 'tag voice-busy', text: this.voiceError ? t('Voice failed') : t('Queued') });
   }
 
   renderScenes() {
     clear(this.sceneList);
     const mode = this.project.settings.voice.mode;
+    const L = langMeta(this.project.lang);
     this.project.scenes.forEach((sc, i) => {
-      const ta = h('textarea', { class: 'scene-text', rows: 1, value: sc.text, 'aria-label': `Scene ${i + 1} text`, spellcheck: true });
+      const ta = h('textarea', { class: 'scene-text', rows: 1, value: sc.text, 'aria-label': t('Scene {n} text', { n: i + 1 }), spellcheck: true, lang: L.id, dir: 'auto' });
       autosize(ta);
       ta.addEventListener('focus', () => this.select(i, { seek: true }));
       ta.addEventListener('input', () => this.editText(i, ta.value));
-      const num = h('button', { class: 'scene-num', text: String(i + 1), title: 'Play from here', on: { click: () => this.select(i, { seek: true, play: true }) } });
-      const emojiBtn = h('button', { class: 'emoji-btn', title: 'Change sticker', 'aria-label': 'Change emoji sticker', text: sc.emoji || '＋', on: { click: () => this.pickEmoji(i) } });
-      const visBtn = h('button', { class: 'vis-btn', title: 'Change background', 'aria-label': 'Change background', on: { click: () => (this.select(i), this.inspector.show('visuals')) } }, this.sceneThumb(sc, i));
+      const num = h('button', { class: 'scene-num', text: String(i + 1), title: t('Play from here'), on: { click: () => this.select(i, { seek: true, play: true }) } });
+      const emojiBtn = h('button', { class: 'emoji-btn', title: t('Change sticker'), 'aria-label': t('Change emoji sticker'), text: sc.emoji || '＋', on: { click: () => this.pickEmoji(i) } });
+      const visBtn = h('button', { class: 'vis-btn', title: t('Change background'), 'aria-label': t('Change background'), on: { click: () => (this.select(i), this.inspector.show('visuals')) } }, this.sceneThumb(sc, i));
       const meta = h(
         'div',
         { class: 'scene-meta' },
-        sc.kind !== 'body' ? h('span', { class: 'tag', text: KIND_LABEL[sc.kind] }) : null,
+        sc.kind !== 'body' ? h('span', { class: 'tag', text: t(KIND_LABEL[sc.kind]) }) : null,
         h('span', { class: 'tag dur', text: '' }),
         h('span', { class: 'vt' }, this.voiceTag(sc)),
         h(
           'span',
           { class: 'meta-tools' },
-          mode === 'mic' ? h('button', { class: 'btn icon small', title: 'Record this line', 'aria-label': 'Record this line', on: { click: () => this.recordScene(i) } }, icon('mic', 15)) : null,
+          mode === 'mic' ? h('button', { class: 'btn icon small', title: t('Record this line'), 'aria-label': t('Record this line'), on: { click: () => this.recordScene(i) } }, icon('mic', 15)) : null,
           emojiBtn,
           visBtn
         )
@@ -567,11 +584,11 @@ export class Editor {
       const actions = h(
         'div',
         { class: 'scene-actions' },
-        sc.kind === 'hook' ? h('button', { class: 'btn ghost icon small', title: 'Try another hook', 'aria-label': 'Try another hook', on: { click: () => this.nextHook(i) } }, icon('wand', 15)) : null,
-        h('button', { class: 'btn ghost icon small', title: 'Move up', 'aria-label': 'Move up', disabled: i === 0, on: { click: () => this.moveScene(i, -1) } }, icon('up', 15)),
-        h('button', { class: 'btn ghost icon small', title: 'Move down', 'aria-label': 'Move down', disabled: i === this.project.scenes.length - 1, on: { click: () => this.moveScene(i, 1) } }, icon('down', 15)),
-        h('button', { class: 'btn ghost icon small', title: 'Add a scene after this one', 'aria-label': 'Add scene after', on: { click: () => this.addScene(i) } }, icon('plus', 15)),
-        h('button', { class: 'btn ghost icon small', title: 'Delete scene', 'aria-label': 'Delete scene', disabled: this.project.scenes.length <= 1, on: { click: () => this.deleteScene(i) } }, icon('trash', 15))
+        sc.kind === 'hook' ? h('button', { class: 'btn ghost icon small', title: t('Try another hook'), 'aria-label': t('Try another hook'), on: { click: () => this.nextHook(i) } }, icon('wand', 15)) : null,
+        h('button', { class: 'btn ghost icon small', title: t('Move up'), 'aria-label': t('Move up'), disabled: i === 0, on: { click: () => this.moveScene(i, -1) } }, icon('up', 15)),
+        h('button', { class: 'btn ghost icon small', title: t('Move down'), 'aria-label': t('Move down'), disabled: i === this.project.scenes.length - 1, on: { click: () => this.moveScene(i, 1) } }, icon('down', 15)),
+        h('button', { class: 'btn ghost icon small', title: t('Add a scene after this one'), 'aria-label': t('Add scene after'), on: { click: () => this.addScene(i) } }, icon('plus', 15)),
+        h('button', { class: 'btn ghost icon small', title: t('Delete scene'), 'aria-label': t('Delete scene'), disabled: this.project.scenes.length <= 1, on: { click: () => this.deleteScene(i) } }, icon('trash', 15))
       );
       const li = h('li', { class: `scene${i === this.selected ? ' sel' : ''}`, dataset: { id: sc.id } }, num, h('div', {}, ta, meta, actions));
       this.sceneList.append(li);
@@ -590,12 +607,12 @@ export class Editor {
   updateDurations() {
     if (!this.timeline) return;
     const total = this.timeline.duration;
-    this.sceneMeta.textContent = `${this.project.scenes.length} scenes, ${fmtTime(total)}`;
+    this.sceneMeta.textContent = joinList(t('{n} scenes', { n: this.project.scenes.length }), fmtTime(total));
     this.timeline.scenes.forEach((s, i) => {
       const li = this.sceneList.children[i];
       if (!li) return;
       const d = li.querySelector('.dur');
-      if (d) d.textContent = `${(s.end - s.start).toFixed(1)}s`;
+      if (d) d.textContent = t('{s}s', { s: fmtNum(s.end - s.start, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) });
     });
   }
 
@@ -624,10 +641,10 @@ export class Editor {
     [...this.sceneList.children].forEach((li, k) => li.classList.toggle('sel', k === i));
     [...this.strip.querySelectorAll('.blk')].forEach((b, k) => b.classList.toggle('sel', k === i));
     if (seek && this.timeline && this.timeline.scenes[i]) {
-      const t = this.timeline.scenes[i].start + (i === 0 ? 0 : 0.02);
-      this.player.seek(t + (this.player.playing ? 0 : 0.6));
+      const at = this.timeline.scenes[i].start + (i === 0 ? 0 : 0.02);
+      this.player.seek(at + (this.player.playing ? 0 : 0.6));
       if (play) {
-        this.player.seek(t);
+        this.player.seek(at);
         this.player.play();
       }
     }
@@ -638,7 +655,7 @@ export class Editor {
   editText(i, text) {
     const sc = this.project.scenes[i];
     sc.text = text;
-    const a = analyzeLine(text, sc.kind);
+    const a = analyzeLine(text, sc.kind, this.project.lang);
     sc.keyword = a.keyword || sc.keyword;
     if (!sc.emojiManual) sc.emoji = a.emoji || sc.emoji;
     sc.stat = a.stat;
@@ -661,7 +678,7 @@ export class Editor {
 
   nextHook(i) {
     const p = this.project;
-    const opts = hookOptions(p.format, { topic: p.topic || 'this', n: p.scenes.filter((s) => s.kind === 'body').length, question: p.question || '' });
+    const opts = hookOptions(p.format, { topic: p.topic || pack(p.lang).yourTopic, n: p.scenes.filter((s) => s.kind === 'body').length, question: p.question || '' }, p.lang);
     const cur = opts.indexOf(p.scenes[i].text);
     const next = opts[(cur + 1) % opts.length];
     const li = this.sceneList.children[i];
@@ -673,7 +690,7 @@ export class Editor {
   }
 
   addScene(after) {
-    const sc = { id: uid('s'), kind: 'body', text: 'New line — click to edit.', keyword: '', emoji: '', stat: null, visual: null };
+    const sc = { id: uid('s'), kind: 'body', text: pack(this.project.lang).newLine, keyword: '', emoji: '', stat: null, visual: null };
     this.project.scenes.splice(after + 1, 0, sc);
     this.renderScenes();
     this.rebuildTimeline();
@@ -693,8 +710,8 @@ export class Editor {
     this.rebuildTimeline();
     this.select(Math.min(i, this.project.scenes.length - 1));
     this.save();
-    toast('Scene deleted', {
-      action: 'Undo',
+    toast(t('Scene deleted'), {
+      action: t('Undo'),
       onAction: () => {
         if (this.disposed) return;
         i = Math.min(i, this.project.scenes.length);
@@ -720,7 +737,7 @@ export class Editor {
 
   pickEmoji(i) {
     const sc = this.project.scenes[i];
-    const custom = h('input', { type: 'text', placeholder: 'Or type/paste any emoji', maxlength: 8, value: '' });
+    const custom = h('input', { type: 'text', placeholder: t('Or type/paste any emoji'), maxlength: 8, value: '' });
     const grid = h('div', { class: 'emoji-pick' });
     let dlg;
     const choose = (e) => {
@@ -732,12 +749,12 @@ export class Editor {
     };
     for (const e of [...new Set([sc.emoji, ...EMOJI_PICKS].filter(Boolean))]) grid.append(h('button', { type: 'button', text: e, on: { click: () => choose(e) } }));
     dlg = modal({
-      title: 'Sticker for this scene',
+      title: t('Sticker for this scene'),
       size: 'small',
       body: h('div', { style: { display: 'grid', gap: '12px' } }, grid, custom),
       actions: [
-        { label: 'No sticker', onClick: () => choose('') },
-        { label: 'Use typed emoji', kind: 'primary', onClick: () => custom.value.trim() && choose(custom.value.trim()) },
+        { label: t('No sticker'), onClick: () => choose('') },
+        { label: t('Use typed emoji'), kind: 'primary', onClick: () => custom.value.trim() && choose(custom.value.trim()) },
       ],
     });
   }
@@ -752,7 +769,7 @@ export class Editor {
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       this.saveNow();
-      toast('Saved');
+      toast(t('Saved'));
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'e') {
       e.preventDefault();
       this.openExport();

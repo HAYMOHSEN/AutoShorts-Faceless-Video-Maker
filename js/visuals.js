@@ -2,6 +2,8 @@
 // palettes, "looks" (theme sets + palette) and helpers for photos/videos with Ken Burns motion.
 
 import { mulberry32, hashString, lerp, clamp, ease, rgba, mixHex } from './util.js';
+import { N_ } from './i18n.js';
+import { englishFor } from './emoji.js';
 
 export const PALETTES = {
   aurora: { bg: ['#050d1f', '#0c2a3a'], c: ['#00f5a0', '#00d9f5', '#7b5cff', '#ff4ecd'], hi: '#00F5A0' },
@@ -17,16 +19,16 @@ export const PALETTES = {
 };
 
 export const LOOKS = [
-  { id: 'aurora', name: 'Aurora', palette: 'aurora', themes: ['aurora', 'lava', 'bokeh'], free: true },
-  { id: 'ocean', name: 'Deep ocean', palette: 'ocean', themes: ['waves', 'bokeh', 'aurora'], free: true },
-  { id: 'midnight', name: 'Midnight', palette: 'midnight', themes: ['bokeh', 'aurora', 'warp'], free: true },
-  { id: 'candy', name: 'Candy pop', palette: 'candy', themes: ['shapes', 'rays', 'stripes'], free: true },
-  { id: 'neon', name: 'Neon night', palette: 'neon', themes: ['grid', 'network', 'warp'] },
-  { id: 'sunset', name: 'Sunset drive', palette: 'sunset', themes: ['grid', 'rays', 'lava'] },
-  { id: 'ember', name: 'Ember', palette: 'ember', themes: ['lava', 'bokeh', 'rays'] },
-  { id: 'matrix', name: 'Code rain', palette: 'matrix', themes: ['code', 'network', 'grid'] },
-  { id: 'paper', name: 'Notebook', palette: 'paper', themes: ['paper', 'shapes'] },
-  { id: 'mono', name: 'Monochrome', palette: 'mono', themes: ['stripes', 'network', 'rays'] },
+  { id: 'aurora', name: N_('Aurora'), palette: 'aurora', themes: ['aurora', 'lava', 'bokeh'], free: true },
+  { id: 'ocean', name: N_('Deep ocean'), palette: 'ocean', themes: ['waves', 'bokeh', 'aurora'], free: true },
+  { id: 'midnight', name: N_('Midnight'), palette: 'midnight', themes: ['bokeh', 'aurora', 'warp'], free: true },
+  { id: 'candy', name: N_('Candy pop'), palette: 'candy', themes: ['shapes', 'rays', 'stripes'], free: true },
+  { id: 'neon', name: N_('Neon night'), palette: 'neon', themes: ['grid', 'network', 'warp'] },
+  { id: 'sunset', name: N_('Sunset drive'), palette: 'sunset', themes: ['grid', 'rays', 'lava'] },
+  { id: 'ember', name: N_('Ember'), palette: 'ember', themes: ['lava', 'bokeh', 'rays'] },
+  { id: 'matrix', name: N_('Code rain'), palette: 'matrix', themes: ['code', 'network', 'grid'] },
+  { id: 'paper', name: N_('Notebook'), palette: 'paper', themes: ['paper', 'shapes'] },
+  { id: 'mono', name: N_('Monochrome'), palette: 'mono', themes: ['stripes', 'network', 'rays'] },
 ];
 
 export const lookById = (id) => LOOKS.find((l) => l.id === id) || LOOKS[0];
@@ -43,10 +45,16 @@ const AUTO_RULES = [
   [/\b(music|night|club|game|gaming|neon|city|retro|80s)/i, 'neon'],
 ];
 
-/** Choose a look from the topic text, limited to the looks the user can use. */
-export function autoLook(text, allowed = (l) => true) {
+/** Choose a look from the topic text, limited to the looks the user can use. Topics in other
+ * languages are matched through the English word for each of their words ("pieuvre" → octopus). */
+export function autoLook(text, allowed = (l) => true, lang = 'en') {
+  let probe = String(text);
+  if (lang && lang !== 'en') {
+    const words = probe.split(/[^\p{L}\p{M}\p{N}]+/u).filter((w) => w.length > 2);
+    probe += ' ' + words.map((w) => englishFor(w, lang)).filter(Boolean).join(' ');
+  }
   for (const [re, id] of AUTO_RULES) {
-    if (re.test(text) && allowed(lookById(id))) return id;
+    if (re.test(probe) && allowed(lookById(id))) return id;
   }
   const free = LOOKS.filter(allowed);
   const pickFrom = free.length ? free : LOOKS;
@@ -54,18 +62,18 @@ export function autoLook(text, allowed = (l) => true) {
 }
 
 export const THEME_NAMES = {
-  aurora: 'Aurora',
-  lava: 'Lava',
-  bokeh: 'Bokeh',
-  waves: 'Waves',
-  warp: 'Warp',
-  grid: 'Retro grid',
-  rays: 'Sunburst',
-  shapes: 'Shapes',
-  stripes: 'Stripes',
-  network: 'Network',
-  code: 'Code rain',
-  paper: 'Notebook',
+  aurora: N_('Aurora'),
+  lava: N_('Lava'),
+  bokeh: N_('Bokeh'),
+  waves: N_('Waves'),
+  warp: N_('Warp'),
+  grid: N_('Retro grid'),
+  rays: N_('Sunburst'),
+  shapes: N_('Shapes'),
+  stripes: N_('Stripes'),
+  network: N_('Network'),
+  code: N_('Code rain'),
+  paper: N_('Notebook'),
 };
 
 // ---------------------------------------------------------------- shared scratch canvases

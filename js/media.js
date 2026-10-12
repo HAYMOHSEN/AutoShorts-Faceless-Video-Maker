@@ -3,6 +3,7 @@
 
 import { db } from './db.js';
 import { uid } from './util.js';
+import { t } from './i18n.js';
 
 let mb = null;
 async function mediabunny() {
@@ -24,7 +25,7 @@ function videoMeta(blob) {
       if (ok) resolve({ w: v.videoWidth, h: v.videoHeight, duration: v.duration, el: v, url });
       else {
         URL.revokeObjectURL(url);
-        reject(new Error('This video format is not supported. Try an MP4 (H.264) or WebM file.'));
+        reject(new Error(t('This video format is not supported. Try an MP4 (H.264) or WebM file.')));
       }
     };
     v.onloadeddata = () => done(true);
@@ -47,7 +48,7 @@ export async function importMedia(file, credit = null) {
   const type = file.type || '';
   const isVideo = type.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(file.name || '');
   const isImage = type.startsWith('image/') || /\.(jpe?g|png|webp|gif|avif|bmp)$/i.test(file.name || '');
-  if (!isVideo && !isImage) throw new Error('Choose a photo (JPG, PNG, WebP) or a video (MP4, WebM).');
+  if (!isVideo && !isImage) throw new Error(t('Choose a photo (JPG, PNG, WebP) or a video (MP4, WebM).'));
   const id = uid('m');
   let asset;
   if (isImage) {

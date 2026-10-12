@@ -3,16 +3,17 @@
 // be locked to the beat grid.
 
 import { mulberry32, hashString } from './util.js';
+import { N_ } from './i18n.js';
 
 export const MOODS = [
-  { id: 'lofi', name: 'Lo-fi chill', bpm: 84, free: true, desc: 'Dusty drums, warm keys' },
-  { id: 'upbeat', name: 'Upbeat pop', bpm: 118, free: true, desc: 'Bouncy and bright' },
-  { id: 'ambient', name: 'Calm ambient', bpm: 70, free: true, desc: 'Soft pads, no drums' },
-  { id: 'cinematic', name: 'Cinematic', bpm: 90, desc: 'Big and emotional' },
-  { id: 'tech', name: 'Tech pulse', bpm: 104, desc: 'Arpeggios, synthwave' },
-  { id: 'hiphop', name: 'Boom bap', bpm: 90, desc: 'Head-nod hip-hop' },
-  { id: 'mystery', name: 'Mystery', bpm: 80, desc: 'Tense and curious' },
-  { id: 'inspire', name: 'Inspiring', bpm: 110, desc: 'Hopeful piano, claps' },
+  { id: 'lofi', name: N_('Lo-fi chill'), bpm: 84, free: true, desc: N_('Dusty drums, warm keys') },
+  { id: 'upbeat', name: N_('Upbeat pop'), bpm: 118, free: true, desc: N_('Bouncy and bright') },
+  { id: 'ambient', name: N_('Calm ambient'), bpm: 70, free: true, desc: N_('Soft pads, no drums') },
+  { id: 'cinematic', name: N_('Cinematic'), bpm: 90, desc: N_('Big and emotional') },
+  { id: 'tech', name: N_('Tech pulse'), bpm: 104, desc: N_('Arpeggios, synthwave') },
+  { id: 'hiphop', name: N_('Boom bap'), bpm: 90, desc: N_('Head-nod hip-hop') },
+  { id: 'mystery', name: N_('Mystery'), bpm: 80, desc: N_('Tense and curious') },
+  { id: 'inspire', name: N_('Inspiring'), bpm: 110, desc: N_('Hopeful piano, claps') },
 ];
 
 export const moodById = (id) => MOODS.find((m) => m.id === id) || MOODS[0];

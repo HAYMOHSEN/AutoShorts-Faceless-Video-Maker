@@ -3,22 +3,23 @@
 
 import { Renderer } from './renderer.js';
 import { ExportMedia } from './media.js';
+import { N_, t } from './i18n.js';
 
 const TRANS = 0.34;
 const PRE = 0.12;
 
 export const RESOLUTIONS = {
-  720: { w: 720, h: 1280, bitrate: 5_000_000, label: '720p' },
-  1080: { w: 1080, h: 1920, bitrate: 9_000_000, label: '1080p Full HD' },
+  720: { w: 720, h: 1280, bitrate: 5_000_000, label: N_('720p') },
+  1080: { w: 1080, h: 1920, bitrate: 9_000_000, label: N_('1080p Full HD') },
 };
 
 export async function exportCapabilities(res = 1080) {
   const M = await import('../vendor/mediabunny.min.mjs');
   const R = RESOLUTIONS[res];
-  if (typeof VideoEncoder === 'undefined') return { ok: false, reason: 'This version of Windows/Edge cannot encode video. Update Microsoft Edge and try again.' };
+  if (typeof VideoEncoder === 'undefined') return { ok: false, reason: t('This version of Windows/Edge cannot encode video. Update Microsoft Edge and try again.') };
   const video = await M.getFirstEncodableVideoCodec(['avc', 'vp9', 'av1'], { width: R.w, height: R.h, bitrate: R.bitrate });
   const audio = await M.getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000, bitrate: 192000 });
-  return { ok: !!video, video, audio, reason: video ? '' : 'No supported video encoder was found on this PC.' };
+  return { ok: !!video, video, audio, reason: video ? '' : t('No supported video encoder was found on this PC.') };
 }
 
 /**

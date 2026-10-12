@@ -3,12 +3,16 @@
 import { db } from './db.js';
 import { uid, deepClone } from './util.js';
 import { lookById, paletteOf } from './visuals.js';
-import { clipKey, previewKeys } from './tts.js';
+import { clipKey, previewKeys, defaultVoice, hasAiVoice, voiceById } from './tts.js';
+import { normLang } from './langs.js';
+import { t } from './i18n.js';
 
 export function defaultSettings(o = {}) {
   const look = o.look || 'aurora';
+  const lang = normLang(o.lang);
   return {
-    voice: { mode: 'ai', id: o.voiceId || 'af_heart', speed: 1 },
+    // Arabic has no AI voice yet: those videos start with "My voice" (record each line)
+    voice: { mode: hasAiVoice(lang) ? 'ai' : 'mic', id: o.voiceId || defaultVoice(lang) || 'af_heart', speed: 1 },
     music: { enabled: o.mood !== 'none', mood: o.mood && o.mood !== 'none' ? o.mood : 'lofi', volume: 0.3, duck: true, beatSync: true, sfx: true, customAssetId: null, customName: '' },
     visuals: { look, motion: true, dim: 0.25, stickers: true, stats: true, titleBanner: 'always', progress: true, transition: 'auto' },
     captions: { style: o.captionStyle || 'pop', position: 'middle', size: 1, highlight: o.highlight || '#FFD23F', color: '#FFFFFF', uppercase: null, keywords: true, maxWords: null },
@@ -16,11 +20,12 @@ export function defaultSettings(o = {}) {
   };
 }
 
-export function createProject({ script, mode, input, format, seconds, settings, source = {} }) {
+export function createProject({ script, lang, mode, input, format, seconds, settings, source = {} }) {
   const now = Date.now();
   return {
     id: uid('p'),
     version: 1,
+    lang: normLang(lang || script.lang),
     title: script.title,
     topic: script.topic,
     format,
@@ -42,7 +47,19 @@ export async function saveProject(p) {
 }
 
 export async function loadProject(id) {
-  return db.get('projects', id);
+  const p = await db.get('projects', id);
+  return p ? normalizeProject(p) : p;
+}
+
+/** Projects from before videos had a language are English; the AI voice always matches the language. */
+export function normalizeProject(p) {
+  p.lang = normLang(p.lang);
+  const v = p.settings && p.settings.voice;
+  if (v && voiceById(v.id).lang !== p.lang) {
+    if (hasAiVoice(p.lang)) v.id = defaultVoice(p.lang);
+    else if (v.mode === 'ai') v.mode = 'mic';
+  }
+  return p;
 }
 
 export async function listProjects() {
@@ -57,7 +74,7 @@ export async function deleteProject(id) {
 export async function duplicateProject(p) {
   const copy = deepClone(p);
   copy.id = uid('p');
-  copy.title = `${p.title} (copy)`;
+  copy.title = t('{title} (copy)', { title: p.title });
   copy.created = copy.updated = Date.now();
   copy.exports = [];
   copy.scenes = copy.scenes.map((s) => ({ ...s, id: uid('s') }));

@@ -1,5 +1,7 @@
 // Tiny DOM helpers, icons, dialogs and toasts.
 
+import { t } from './i18n.js';
+
 export function h(tag, props, ...children) {
   const el = document.createElement(tag);
   if (props) {
@@ -71,11 +73,15 @@ const ICONS = {
   safe: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M6 17h12M14 7h4"/>',
   dup: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V5a1 1 0 011-1h11"/>',
   dots: '<circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9s1.3-6.4 3.8-9z"/>',
 };
+
+// icons that point somewhere are mirrored in right-to-left languages
+const DIRECTIONAL = new Set(['back']);
 
 export function icon(name, size = 18) {
   const span = document.createElement('span');
-  span.className = 'ico';
+  span.className = DIRECTIONAL.has(name) ? 'ico rtl-flip' : 'ico';
   span.setAttribute('aria-hidden', 'true');
   span.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
   return span;
@@ -103,9 +109,9 @@ export function toast(message, { action, onAction, timeout = 4200, kind = '' } =
   }
   host.append(el);
   requestAnimationFrame(() => el.classList.add('in'));
-  let t = setTimeout(close, timeout);
-  el.addEventListener('mouseenter', () => clearTimeout(t));
-  el.addEventListener('mouseleave', () => (t = setTimeout(close, 1800)));
+  let timer = setTimeout(close, timeout);
+  el.addEventListener('mouseenter', () => clearTimeout(timer));
+  el.addEventListener('mouseleave', () => (timer = setTimeout(close, 1800)));
   function close() {
     el.classList.remove('in');
     setTimeout(() => el.remove(), 220);
@@ -122,7 +128,7 @@ export function modal({ title, body, actions = [], onClose, size = '', dismissab
   const titleId = 'dlg-' + Math.random().toString(36).slice(2, 8);
   const panel = h('div', { class: `dialog ${size} ${className}`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId });
   const head = h('div', { class: 'dialog-head' }, h('h2', { id: titleId, text: title }));
-  if (dismissable) head.append(h('button', { class: 'btn icon ghost', 'aria-label': 'Close', on: { click: () => close() } }, icon('x')));
+  if (dismissable) head.append(h('button', { class: 'btn icon ghost', 'aria-label': t('Close'), on: { click: () => close() } }, icon('x')));
   const foot = h('div', { class: 'dialog-foot' });
   const bodyWrap = h('div', { class: 'dialog-body' }, body);
   panel.append(head, bodyWrap, foot);
@@ -157,6 +163,9 @@ export function modal({ title, body, actions = [], onClose, size = '', dismissab
     if (e.key === 'Tab') trapFocus(e, panel);
   };
   document.addEventListener('keydown', onKey, true);
+  // a dialog belongs to the screen it was opened on: moving to another screen closes it
+  const onRoute = () => close();
+  window.addEventListener('hashchange', onRoute);
   document.body.append(backdrop);
   openCount++;
   document.body.classList.add('has-dialog');
@@ -170,6 +179,7 @@ export function modal({ title, body, actions = [], onClose, size = '', dismissab
     if (closed) return;
     closed = true;
     document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('hashchange', onRoute);
     backdrop.classList.remove('in');
     setTimeout(() => backdrop.remove(), 180);
     openCount--;
@@ -177,7 +187,7 @@ export function modal({ title, body, actions = [], onClose, size = '', dismissab
     if (prevFocus && prevFocus.focus) prevFocus.focus();
     onClose && onClose(result);
   }
-  return { close, panel, body: bodyWrap, setActions, setTitle: (t) => (head.querySelector('h2').textContent = t) };
+  return { close, panel, body: bodyWrap, setActions, setTitle: (text) => (head.querySelector('h2').textContent = text) };
 }
 
 function trapFocus(e, root) {
@@ -194,7 +204,7 @@ function trapFocus(e, root) {
   }
 }
 
-export function confirmDialog(message, { title = 'Are you sure?', okLabel = 'Confirm', danger = false } = {}) {
+export function confirmDialog(message, { title = t('Are you sure?'), okLabel = t('Confirm'), danger = false } = {}) {
   return new Promise((resolve) => {
     let result = false;
     modal({
@@ -202,7 +212,7 @@ export function confirmDialog(message, { title = 'Are you sure?', okLabel = 'Con
       size: 'small',
       body: h('p', { class: 'lead', text: message }),
       actions: [
-        { label: 'Cancel', onClick: (close) => close() },
+        { label: t('Cancel'), onClick: (close) => close() },
         {
           label: okLabel,
           kind: danger ? 'danger' : 'primary',
@@ -253,7 +263,9 @@ export function seg(options, value, onChange, { label, className = '' } = {}) {
     const btns = [...wrap.querySelectorAll('button')];
     const i = btns.indexOf(document.activeElement);
     if (i < 0) return;
-    const n = btns[(i + (e.key === 'ArrowRight' ? 1 : btns.length - 1)) % btns.length];
+    // the arrow keys follow the reading direction (reversed in Arabic)
+    const forward = (e.key === 'ArrowRight') !== (getComputedStyle(wrap).direction === 'rtl');
+    const n = btns[(i + (forward ? 1 : btns.length - 1)) % btns.length];
     n.focus();
     e.preventDefault();
   });
@@ -302,14 +314,14 @@ export function autosize(ta) {
 export async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    toast('Copied to clipboard');
+    toast(t('Copied to clipboard'));
   } catch {
     const ta = h('textarea', { value: text, style: { position: 'fixed', opacity: '0' } });
     document.body.append(ta);
     ta.select();
     document.execCommand('copy');
     ta.remove();
-    toast('Copied to clipboard');
+    toast(t('Copied to clipboard'));
   }
 }
 

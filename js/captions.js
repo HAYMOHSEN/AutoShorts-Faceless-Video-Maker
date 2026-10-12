@@ -3,24 +3,26 @@
 
 import { clamp, ease, lerp, rgba, hasArabic, mulberry32, luminance } from './util.js';
 import { stem } from './script.js';
+import { pack, normLang } from './langs.js';
+import { N_ } from './i18n.js';
 
 export const CAPTION_STYLES = [
-  { id: 'pop', name: 'Bold pop', free: true, family: 'Montserrat', weight: 900, size: 0.084, upper: true, maxWords: 3, lineH: 1.08 },
-  { id: 'karaoke', name: 'Highlight box', free: true, family: 'Montserrat', weight: 800, size: 0.07, upper: true, maxWords: 4, lineH: 1.24 },
-  { id: 'clean', name: 'Clean box', free: true, family: 'Poppins', weight: 700, size: 0.056, upper: false, maxWords: 7, lineH: 1.42 },
-  { id: 'minimal', name: 'Minimal', free: true, family: 'Poppins', weight: 600, size: 0.062, upper: false, maxWords: 5, lineH: 1.2 },
-  { id: 'neon', name: 'Neon glow', family: 'Bebas Neue', weight: 400, size: 0.13, upper: true, maxWords: 3, lineH: 0.98, letter: 0.02 },
-  { id: 'comic', name: 'Comic pop', family: 'Bangers', weight: 400, size: 0.11, upper: true, maxWords: 3, lineH: 1.02, letter: 0.03 },
-  { id: 'slam', name: 'Word slam', family: 'Anton', weight: 400, size: 0.17, upper: true, maxWords: 1, lineH: 1 },
-  { id: 'marker', name: 'Highlighter', family: 'Montserrat', weight: 800, size: 0.066, upper: false, maxWords: 5, lineH: 1.32 },
-  { id: 'type', name: 'Typewriter', family: 'Space Mono', weight: 700, size: 0.056, upper: false, maxWords: 6, lineH: 1.34 },
+  { id: 'pop', name: N_('Bold pop'), free: true, family: 'Montserrat', weight: 900, size: 0.084, upper: true, maxWords: 3, lineH: 1.08 },
+  { id: 'karaoke', name: N_('Highlight box'), free: true, family: 'Montserrat', weight: 800, size: 0.07, upper: true, maxWords: 4, lineH: 1.24 },
+  { id: 'clean', name: N_('Clean box'), free: true, family: 'Poppins', weight: 700, size: 0.056, upper: false, maxWords: 7, lineH: 1.42 },
+  { id: 'minimal', name: N_('Minimal'), free: true, family: 'Poppins', weight: 600, size: 0.062, upper: false, maxWords: 5, lineH: 1.2 },
+  { id: 'neon', name: N_('Neon glow'), family: 'Bebas Neue', weight: 400, size: 0.13, upper: true, maxWords: 3, lineH: 0.98, letter: 0.02 },
+  { id: 'comic', name: N_('Comic pop'), family: 'Bangers', weight: 400, size: 0.11, upper: true, maxWords: 3, lineH: 1.02, letter: 0.03 },
+  { id: 'slam', name: N_('Word slam'), family: 'Anton', weight: 400, size: 0.17, upper: true, maxWords: 1, lineH: 1 },
+  { id: 'marker', name: N_('Highlighter'), family: 'Montserrat', weight: 800, size: 0.066, upper: false, maxWords: 5, lineH: 1.32 },
+  { id: 'type', name: N_('Typewriter'), family: 'Space Mono', weight: 700, size: 0.056, upper: false, maxWords: 6, lineH: 1.34 },
 ];
 
 export const styleById = (id) => CAPTION_STYLES.find((s) => s.id === id) || CAPTION_STYLES[0];
 
 export const HIGHLIGHTS = ['#FFD23F', '#7CFF6B', '#3DE0FF', '#FF5DA2', '#FF8A3D', '#FFFFFF'];
 
-const FALLBACK = '"Segoe UI", "Noto Sans Arabic", Tahoma, Arial, sans-serif';
+const FALLBACK = '"AS Arabic", "AS Devanagari", "Segoe UI", "Nirmala UI", Tahoma, Arial, sans-serif';
 const POWER = new Set(['never', 'always', 'secret', 'secrets', 'free', 'best', 'worst', 'only', 'first', 'last', 'million', 'billion', 'trillion', 'biggest', 'largest', 'smallest', 'fastest', 'deadly', 'dangerous', 'shocking', 'insane', 'wild', 'crazy', 'impossible', 'nobody', 'everyone', 'truth', 'stop', 'warning', 'why', 'how', 'mistake', 'mistakes']);
 
 export function fontFor(style, px) {
@@ -30,7 +32,7 @@ export function fontFor(style, px) {
 
 function displayWord(w, upper) {
   let s = String(w).replace(/^["'“‘(]+|["'”’)]+$/g, '');
-  s = s.replace(/[,.;:]+$/, '');
+  s = s.replace(/[,.;:،؛।]+$/, '');
   return upper ? s.toLocaleUpperCase() : s;
 }
 
@@ -44,9 +46,11 @@ export function buildChunks(timeline, project, captionSettings) {
   const upper = captionSettings.uppercase ?? style.upper;
   const maxChars = Math.max(10, Math.round((style.maxWords <= 1 ? 12 : 16) * (0.084 / style.size) * (style.upper ? 1 : 1.25)));
   const chunks = [];
+  const lang = normLang(project.lang);
+  const power = lang === 'en' ? POWER : pack(lang).power || new Set();
   timeline.scenes.forEach((sc, si) => {
     const scene = project.scenes[si];
-    const kw = scene && scene.keyword ? stem(scene.keyword.toLowerCase()) : '';
+    const kw = scene && scene.keyword ? stem(scene.keyword.toLocaleLowerCase(), lang) : '';
     let cur = null;
     const flush = () => {
       if (cur && cur.words.length) chunks.push(cur);
@@ -56,8 +60,8 @@ export function buildChunks(timeline, project, captionSettings) {
       const raw = w.w;
       const t = displayWord(raw, upper);
       if (!t) return;
-      const low = raw.toLowerCase().replace(/[^a-z0-9%؀-ۿ]/g, '');
-      const emph = captionSettings.keywords !== false && ((kw && stem(low) === kw) || /\d/.test(low) || POWER.has(low));
+      const low = lang === 'en' ? raw.toLowerCase().replace(/[^a-z0-9%؀-ۿ]/g, '') : raw.toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}%]/gu, '');
+      const emph = captionSettings.keywords !== false && ((kw && stem(low, lang) === kw) || /[\d\u0660-\u0669\u06F0-\u06F9\u0966-\u096F]/.test(low) || power.has(low));
       if (!cur) cur = { start: w.start, end: w.end, scene: si, words: [], rtl: false };
       const chars = cur.words.reduce((n, x) => n + x.t.length + 1, 0) + t.length;
       if (cur.words.length >= maxWords || (cur.words.length && chars > maxChars * 2)) {
@@ -67,8 +71,8 @@ export function buildChunks(timeline, project, captionSettings) {
       cur.words.push({ t, start: w.start, end: w.end, emph });
       if (hasArabic(t)) cur.rtl = true;
       cur.end = w.end;
-      const endsSentence = /[.!?…؟]["')]*$/.test(raw);
-      const comma = /[,;:—–]$/.test(raw);
+      const endsSentence = /[.!?…؟।]["')]*$/.test(raw);
+      const comma = /[,;:—–،؛]$/.test(raw);
       if (endsSentence || (comma && cur.words.length >= 2)) flush();
       if (wi === sc.words.length - 1) flush();
     });
@@ -167,6 +171,13 @@ function setFont(ctx, style, px) {
   if ('letterSpacing' in ctx) ctx.letterSpacing = style.letter ? `${(style.letter * px).toFixed(1)}px` : '0px';
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
+}
+
+let segmenter = null;
+/** A word split into user-perceived letters (grapheme clusters). */
+function graphemes(text) {
+  if (!segmenter && typeof Intl !== 'undefined' && Intl.Segmenter) segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+  return segmenter ? Array.from(segmenter.segment(text), (g) => g.segment) : Array.from(text);
 }
 
 function wordDir(ctx, w) {
@@ -450,23 +461,31 @@ export function drawCaptions(ctx, W, H, t, chunks, settings, opts = {}) {
       roundRect(ctx, left - px * 0.6, top, right - left + px * 1.2, bottom - top, px * 0.3);
       ctx.fill();
       let caret = null;
+      const cw = px * 0.45;
       for (const ln of L.lines) {
         for (const w of ln.words) {
           const dur = Math.max(0.1, w.end - w.start);
           const p = clamp((t - w.start + 0.04) / (dur * 0.85), 0, 1);
-          const n = Math.ceil(w.t.length * p);
+          // type whole letters: a Devanagari syllable or an Arabic letter with its marks
+          const letters = graphemes(w.t);
+          const n = Math.ceil(letters.length * p);
           if (n <= 0) continue;
-          const shown = w.t.slice(0, n);
-          ctx.fillStyle = w.emph ? hi : color;
-          ctx.textAlign = 'left';
-          ctx.fillText(shown, w.x, ln.y);
-          caret = { x: w.x + measure(ctx, shown, style, px), y: ln.y };
+          const shown = letters.slice(0, n).join('');
+          const rtl = hasArabic(w.t);
+          const sw = measure(ctx, shown, style, px);
           setFont(ctx, style, px);
+          if ('direction' in ctx) ctx.direction = rtl ? 'rtl' : 'ltr';
+          ctx.textAlign = rtl ? 'right' : 'left';
+          ctx.fillStyle = w.emph ? hi : color;
+          // right-to-left words grow leftwards from the right edge of their place on the line
+          const start = rtl ? w.x + w.w : w.x;
+          ctx.fillText(shown, start, ln.y);
+          caret = { x: rtl ? start - sw - px * 0.08 - cw : start + sw + px * 0.08, y: ln.y };
         }
       }
       if (caret && Math.floor(t * 2.5) % 2 === 0) {
         ctx.fillStyle = hi;
-        ctx.fillRect(caret.x + px * 0.08, caret.y - px * 0.45, px * 0.45, px * 0.9);
+        ctx.fillRect(caret.x, caret.y - px * 0.45, cw, px * 0.9);
       }
       break;
     }

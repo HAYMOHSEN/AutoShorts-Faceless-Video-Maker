@@ -6,6 +6,10 @@ import { drawTheme, drawCover, drawGrain, lookById, sceneTheme, PALETTES } from 
 import { drawCaptions, captionAnchorY } from './captions.js';
 import { sceneAt } from './timeline.js';
 import { clamp, ease, lerp, hashString, luminance } from './util.js';
+import { langMeta, pack } from './langs.js';
+
+// bundled fonts for Arabic and Devanagari text in titles, number cards and the watermark
+const SCRIPTS = '"AS Arabic", "AS Devanagari"';
 
 const TRANS = 0.34;
 const PRE = 0.12;
@@ -47,6 +51,10 @@ export class Renderer {
   setData(d) {
     this.data = d;
     this.titleCache = null;
+    this.rtl = !!(d && d.project && langMeta(d.project.lang).dir === 'rtl');
+    // text direction follows the video's language, not the interface (an English video in the
+    // Arabic interface still reads left to right)
+    if (this.canvas && this.canvas.setAttribute) this.canvas.setAttribute('dir', this.rtl ? 'rtl' : 'ltr');
   }
 
   ensureLayers() {
@@ -100,6 +108,7 @@ export class Renderer {
   draw(t) {
     if (!this.data || !this.data.timeline) return;
     const ctx = this.ctx;
+    if ('direction' in ctx) ctx.direction = this.rtl ? 'rtl' : 'ltr';
     const W = this.canvas.width;
     const H = this.canvas.height;
     const { project, timeline, chunks, media } = this.data;
@@ -285,6 +294,7 @@ export class Renderer {
     ctx.translate(0, (1 - a) * H * 0.03);
     ctx.font = `400 ${Math.round(px)}px Anton, Impact, sans-serif`;
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    if ('direction' in ctx) ctx.direction = 'ltr'; // "70%" in every language
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     let w = ctx.measureText(text).width;
@@ -305,9 +315,11 @@ export class Renderer {
     ctx.restore();
     if (stat.label) {
       const lp = W * 0.046;
-      ctx.font = `800 ${Math.round(lp)}px Montserrat, "Segoe UI", sans-serif`;
-      if ('letterSpacing' in ctx) ctx.letterSpacing = `${(lp * 0.06).toFixed(1)}px`;
+      ctx.font = `800 ${Math.round(lp)}px Montserrat, ${SCRIPTS}, "Segoe UI", sans-serif`;
       const label = stat.label.toUpperCase();
+      // spacing letters apart breaks joined scripts (Arabic) and Devanagari clusters
+      if ('letterSpacing' in ctx) ctx.letterSpacing = /^[\x00-\u024f\s]*$/.test(label) ? `${(lp * 0.06).toFixed(1)}px` : '0px';
+      if (this.rtl) ctx.direction = 'rtl';
       w = ctx.measureText(label).width;
       const bw = w + lp * 1.2;
       const bh = lp * 1.6;
@@ -328,7 +340,7 @@ export class Renderer {
     const maxW = W * 0.8;
     let lines = [];
     for (let guard = 0; guard < 6; guard++) {
-      ctx.font = `900 ${Math.round(px)}px Montserrat, "Segoe UI", sans-serif`;
+      ctx.font = `900 ${Math.round(px)}px Montserrat, ${SCRIPTS}, "Segoe UI", sans-serif`;
       if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
       const words = title.split(/\s+/);
       lines = [];
@@ -348,7 +360,7 @@ export class Renderer {
       lines = lines.slice(0, 2);
       lines[1] = lines[1].replace(/\s*\S*$/, '') + '…';
     }
-    ctx.font = `900 ${Math.round(px)}px Montserrat, "Segoe UI", sans-serif`;
+    ctx.font = `900 ${Math.round(px)}px Montserrat, ${SCRIPTS}, "Segoe UI", sans-serif`;
     const widths = lines.map((l) => ctx.measureText(l).width);
     this.titleCache = { title, W, px, lines, widths };
     return this.titleCache;
@@ -383,8 +395,9 @@ export class Renderer {
     roundRect(ctx, W / 2 - boxW / 2, y0, boxW, boxH, L.px * 0.35);
     ctx.fill();
     ctx.shadowColor = 'transparent';
-    ctx.font = `900 ${Math.round(L.px)}px Montserrat, "Segoe UI", sans-serif`;
+    ctx.font = `900 ${Math.round(L.px)}px Montserrat, ${SCRIPTS}, "Segoe UI", sans-serif`;
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    if (this.rtl) ctx.direction = 'rtl';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = luminance(hi) > 0.45 ? '#111114' : '#FFFFFF';
@@ -397,9 +410,12 @@ export class Renderer {
     const x = W * 0.04;
     const y = H * 0.022;
     ctx.save();
-    ctx.font = `700 ${Math.round(px)}px "Archivo Variable", Archivo, "Segoe UI", sans-serif`;
+    // the mark is written in the video's language
+    const L = langMeta(this.data.project && this.data.project.lang);
+    ctx.font = `700 ${Math.round(px)}px "Archivo Variable", Archivo, ${SCRIPTS}, "Segoe UI", sans-serif`;
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
-    const label = 'Made with AutoShorts';
+    if (L.dir === 'rtl') ctx.direction = 'rtl';
+    const label = pack(L.id).madeWith;
     const tw = ctx.measureText(label).width;
     const icon = px * 1.1;
     const w = tw + icon + px * 1.4;

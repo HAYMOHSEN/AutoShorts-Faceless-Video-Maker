@@ -136,13 +136,20 @@ export function nextMonday(date = new Date()) {
   return d;
 }
 
+/** File-name friendly version of a title, in any script ("¿Por qué?" → "por-que"). */
 export function slugify(s, max = 60) {
-  return (s || 'video')
-    .toLowerCase()
-    .replace(/['’]/g, '')
-    .replace(/[^a-z0-9؀-ۿ]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, max) || 'video';
+  return (
+    String(s || 'video')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // accents on Latin letters (Devanagari and Arabic marks stay)
+      .normalize('NFC')
+      .toLocaleLowerCase()
+      .replace(/['’]/g, '')
+      .replace(/[^\p{L}\p{M}\p{N}]+/gu, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, max)
+      .replace(/-+$/, '') || 'video'
+  );
 }
 
 export function escapeHtml(s) {
@@ -153,15 +160,4 @@ export const hasArabic = (s) => /[֐-ࣿיִ-﷿ﹰ-﻿]/.test(s || '');
 
 export function deepClone(o) {
   return typeof structuredClone === 'function' ? structuredClone(o) : JSON.parse(JSON.stringify(o));
-}
-
-export function relativeDate(ts) {
-  const diff = Date.now() - ts;
-  const day = 86400000;
-  if (diff < 60000) return 'Just now';
-  if (diff < 3600000) return `${Math.round(diff / 60000)} min ago`;
-  if (diff < day) return `${Math.round(diff / 3600000)} h ago`;
-  if (diff < 2 * day) return 'Yesterday';
-  if (diff < 7 * day) return `${Math.round(diff / day)} days ago`;
-  return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }

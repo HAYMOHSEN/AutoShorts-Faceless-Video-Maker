@@ -6,6 +6,8 @@ import { license, quota, recordExport, resetText } from './license.js';
 import { buildPublishKit, UPLOAD_LINKS } from './publish.js';
 import { fmtBytes, fmtTime, slugify } from './util.js';
 import { Renderer } from './renderer.js';
+import { t, tx, joinList } from './i18n.js';
+import { langMeta } from './langs.js';
 
 export async function openExport(ed) {
   const pro = license.pro;
@@ -25,7 +27,7 @@ export async function openExport(ed) {
   let ctrl = null;
   let resultUrl = null;
   const dlg = modal({
-    title: 'Export video',
+    title: t('Export video'),
     body: grid,
     size: 'wide',
     onClose: () => {
@@ -36,14 +38,14 @@ export async function openExport(ed) {
 
   function optionsView() {
     clear(right);
-    const opts = h('div', { class: 'res-options', role: 'radiogroup', 'aria-label': 'Resolution' });
+    const opts = h('div', { class: 'res-options', role: 'radiogroup', 'aria-label': t('Resolution') });
     for (const r of [720, 1080]) {
       const R = RESOLUTIONS[r];
       const locked = r === 1080 && !pro;
       const b = h(
         'button',
         { class: 'res-option', role: 'radio', 'aria-checked': String(res === r) },
-        h('span', {}, h('b', { text: R.label }), h('small', { text: `${R.w} × ${R.h}, 30 fps, MP4` })),
+        h('span', {}, h('b', { text: t(R.label) }), h('small', {}, h('span', { dir: 'ltr', text: `${R.w} × ${R.h}, 30 fps, MP4` }))),
         locked ? icon('lock', 15) : null
       );
       b.addEventListener('click', () => {
@@ -54,22 +56,22 @@ export async function openExport(ed) {
       opts.append(b);
     }
     const info = h('div', { class: 'note' });
-    if (pro) info.append(h('strong', { text: 'Pro' }), h('span', { text: 'Unlimited exports, no watermark.' }));
+    if (pro) info.append(h('strong', { text: t('Pro') }), h('span', { text: t('Unlimited exports, no watermark.') }));
     else {
       info.append(
-        h('strong', { text: `${q.left} of ${q.limit} free exports left this week` }),
-        h('span', { text: `Free exports are 720p with a small “Made with AutoShorts” mark. ${resetText(q.resets)}.` }),
-        h('div', { class: 'row' }, h('button', { class: 'btn pro small', on: { click: () => ed.ctx.openPro('export') } }, icon('crown', 14), 'Get Pro for unlimited HD'))
+        h('strong', {}, ...tx('{left} of {limit} free exports left this week', { left: q.left, limit: q.limit, n: q.limit })),
+        h('span', { text: t('Free exports are 720p with a small “Made with AutoShorts” mark. {reset}.', { reset: resetText(q.resets) }) }),
+        h('div', { class: 'row' }, h('button', { class: 'btn pro small', on: { click: () => ed.ctx.openPro('export') } }, icon('crown', 14), t('Get Pro for unlimited HD')))
       );
     }
     const pending = ed.pendingVoices().length;
-    const voiceNote = pending && ed.project.settings.voice.mode === 'ai' ? h('p', { class: 'hint', text: `${pending} voice line${pending > 1 ? 's are' : ' is'} still being recorded. Export will wait for ${pending > 1 ? 'them' : 'it'}.` }) : null;
+    const voiceNote = pending && ed.project.settings.voice.mode === 'ai' ? h('p', { class: 'hint', text: t('{n} voice lines are still being recorded. Export will wait for them.', { n: pending }) }) : null;
     const missingMic = ed.project.settings.voice.mode === 'mic' ? ed.project.scenes.filter((s) => !s.recId).length : 0;
-    const micNote = missingMic ? h('p', { class: 'hint', text: `${missingMic} scene${missingMic > 1 ? 's have' : ' has'} no recording yet and will be silent.` }) : null;
-    const go = h('button', { class: 'btn primary big', disabled: !canExport }, icon('download', 20), 'Export MP4');
+    const micNote = missingMic ? h('p', { class: 'hint', text: t('{n} scenes have no recording yet and will be silent.', { n: missingMic }) }) : null;
+    const go = h('button', { class: 'btn primary big', disabled: !canExport }, icon('download', 20), t('Export MP4'));
     go.addEventListener('click', run);
     right.append(...[
-      h('div', { class: 'kv' }, h('span', { text: 'Length' }), h('b', { text: fmtTime(ed.timeline.duration) }), h('span', { text: 'Scenes' }), h('b', { text: String(ed.project.scenes.length) })),
+      h('div', { class: 'kv' }, h('span', { text: t('Length') }), h('b', { text: fmtTime(ed.timeline.duration) }), h('span', { text: t('Scenes') }), h('b', { text: String(ed.project.scenes.length) })),
       opts,
       info,
       voiceNote,
@@ -82,30 +84,30 @@ export async function openExport(ed) {
   async function run() {
     ctrl = new AbortController();
     clear(right);
-    const label = h('strong', { text: 'Getting ready' });
+    const label = h('strong', { text: t('Getting ready') });
     const sub = h('span', { text: '' });
     const bar = h('div', { class: 'progress' }, h('i'));
     right.append(h('div', { class: 'note' }, label, bar, sub));
-    dlg.setActions([{ label: 'Cancel', onClick: () => ctrl.abort() }]);
+    dlg.setActions([{ label: t('Cancel'), onClick: () => ctrl.abort() }]);
     const setP = (p) => (bar.firstChild.style.width = `${Math.round(p * 100)}%`);
     try {
       const caps = await exportCapabilities(res);
       if (!caps.ok) throw new Error(caps.reason);
       if (ed.project.settings.voice.mode === 'ai' && ed.pendingVoices().length) {
-        label.textContent = 'Finishing the voiceover';
+        label.textContent = t('Finishing the voiceover');
         const ok = await ed.waitForVoices((d, n) => {
-          sub.textContent = `Line ${Math.min(d + 1, n)} of ${n}`;
+          sub.textContent = t('Line {i} of {total}', { i: Math.min(d + 1, n), total: n });
           setP(n ? d / n : 0);
           if (ctrl.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
         });
-        if (!ok) throw new Error(ed.voiceError || 'The voice could not be finished.');
+        if (!ok) throw new Error(ed.voiceError || t('The voice could not be finished.'));
       }
       if (ctrl.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-      label.textContent = 'Mixing audio';
+      label.textContent = t('Mixing audio');
       sub.textContent = '';
       const snap = await ed.exportSnapshot();
       if (ctrl.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
-      label.textContent = 'Rendering video';
+      label.textContent = t('Rendering video');
       const result = await exportVideo({
         project: ed.project,
         timeline: snap.timeline,
@@ -117,9 +119,12 @@ export async function openExport(ed) {
         onProgress: (p, info) => {
           setP(p);
           if (info.finishing) {
-            label.textContent = 'Finishing the file';
+            label.textContent = t('Finishing the file');
             sub.textContent = '';
-          } else if (info.frame) sub.textContent = `Frame ${info.frame} of ${info.frames}${info.eta != null ? ` · about ${Math.max(1, Math.round(info.eta))}s left` : ''}`;
+          } else if (info.frame) {
+            const frame = t('Frame {i} of {total}', { i: info.frame, total: info.frames });
+            sub.textContent = info.eta != null ? `${frame} · ${t('about {s}s left', { s: Math.max(1, Math.round(info.eta)) })}` : frame;
+          }
         },
       });
       if (!license.pro) await recordExport();
@@ -128,16 +133,16 @@ export async function openExport(ed) {
       doneView(result);
     } catch (e) {
       if (e.name === 'AbortError') {
-        toast('Export cancelled');
+        toast(t('Export cancelled'));
         if (dlg.panel.isConnected) optionsView();
         return;
       }
       console.error(e);
       clear(right);
-      right.append(h('div', { class: 'note warn' }, h('strong', { text: 'Export didn’t finish' }), h('span', { text: e.message || String(e) })));
+      right.append(h('div', { class: 'note warn' }, h('strong', { text: t('Export didn’t finish') }), h('span', { text: e.message || String(e) })));
       dlg.setActions([
-        { label: 'Close', onClick: (close) => close() },
-        { label: 'Try again', kind: 'primary', onClick: () => optionsView() },
+        { label: t('Close'), onClick: (close) => close() },
+        { label: t('Try again'), kind: 'primary', onClick: () => optionsView() },
       ]);
     }
   }
@@ -151,28 +156,29 @@ export async function openExport(ed) {
     clear(right);
     const name = `${slugify(ed.project.title)}.mp4`;
     const kit = buildPublishKit(ed.project);
-    const save = h('button', { class: 'btn primary big' }, icon('download', 20), 'Save MP4');
+    const save = h('button', { class: 'btn primary big' }, icon('download', 20), t('Save MP4'));
     save.addEventListener('click', async () => {
-      const r = await saveBlob(result.blob, name, { description: 'MP4 video', mime: 'video/mp4', ext: '.mp4' });
-      if (r !== 'cancelled') toast(r === 'saved' ? 'Video saved' : 'Video downloaded');
+      const r = await saveBlob(result.blob, name, { description: t('MP4 video'), mime: 'video/mp4', ext: '.mp4' });
+      if (r !== 'cancelled') toast(r === 'saved' ? t('Video saved') : t('Video downloaded'));
     });
-    const cover = h('button', { class: 'btn' }, icon('image', 16), 'Save cover image');
+    const cover = h('button', { class: 'btn' }, icon('image', 16), t('Save cover image'));
     cover.addEventListener('click', async () => {
-      const t = Math.min(ed.timeline.duration - 0.1, (ed.timeline.scenes[0]?.end || 2) * 0.6);
-      const blob = await exportCover({ project: ed.project, timeline: ed.timeline, chunks: ed.chunks, watermark: !license.pro }, t);
-      await saveBlob(blob, `${slugify(ed.project.title)}-cover.jpg`, { description: 'JPEG image', mime: 'image/jpeg', ext: '.jpg' });
+      const at = Math.min(ed.timeline.duration - 0.1, (ed.timeline.scenes[0]?.end || 2) * 0.6);
+      const blob = await exportCover({ project: ed.project, timeline: ed.timeline, chunks: ed.chunks, watermark: !license.pro }, at);
+      await saveBlob(blob, `${slugify(ed.project.title)}-cover.jpg`, { description: t('JPEG image'), mime: 'image/jpeg', ext: '.jpg' });
     });
-    const codecNote = result.videoCodec !== 'avc' ? h('p', { class: 'hint', text: `This PC saved the video as ${String(result.videoCodec).toUpperCase()}${result.audioCodec ? ' / ' + String(result.audioCodec).toUpperCase() : ''} instead of H.264. YouTube accepts it. If another app refuses the upload, install the Media Feature Pack (Windows N editions), update Microsoft Edge and export again.` }) : null;
+    const codecs = `${String(result.videoCodec).toUpperCase()}${result.audioCodec ? ' / ' + String(result.audioCodec).toUpperCase() : ''}`;
+    const codecNote = result.videoCodec !== 'avc' ? h('p', { class: 'hint', text: t('This PC saved the video as {codecs} instead of H.264. YouTube accepts it. If another app refuses the upload, install the Media Feature Pack (Windows N editions), update Microsoft Edge and export again.', { codecs }) }) : null;
     const links = h('div', { class: 'media-actions' });
     for (const l of UPLOAD_LINKS) links.append(h('a', { class: 'btn small', href: l.url, target: '_blank', rel: 'noopener' }, icon('external', 14), l.label));
     right.append(...[
-      h('div', { class: 'note' }, h('strong', { text: 'Your video is ready' }), h('span', { text: `${RESOLUTIONS[res].label}, ${fmtTime(result.seconds)}, ${fmtBytes(result.blob.size)}. Rendered in ${Math.round(result.renderSeconds)}s.` })),
+      h('div', { class: 'note' }, h('strong', { text: t('Your video is ready') }), h('span', { text: `${joinList(t(RESOLUTIONS[res].label), fmtTime(result.seconds), fmtBytes(result.blob.size))}. ${t('Rendered in {s}s.', { s: Math.round(result.renderSeconds) })}` })),
       h('div', { class: 'row' }, save, cover),
       codecNote,
-      h('div', { class: 'kit-block' }, h('div', { class: 'head' }, h('span', { text: 'Caption to paste' }), h('button', { class: 'btn small ghost', on: { click: () => copyText(kit.tiktok) } }, icon('copy', 14), 'Copy')), h('textarea', { rows: 4, value: kit.tiktok, 'aria-label': 'Caption' })),
-      h('div', { class: 'group' }, h('span', { class: 'field-label', text: 'Upload it' }), links),
+      h('div', { class: 'kit-block' }, h('div', { class: 'head' }, h('span', { text: t('Caption to paste') }), h('button', { class: 'btn small ghost', on: { click: () => copyText(kit.tiktok) } }, icon('copy', 14), t('Copy'))), h('textarea', { rows: 4, value: kit.tiktok, 'aria-label': t('Caption'), lang: langMeta(ed.project.lang).id, dir: 'auto' })),
+      h('div', { class: 'group' }, h('span', { class: 'field-label', text: t('Upload it') }), links),
     ].filter(Boolean));
-    dlg.setActions([{ label: 'Done', onClick: (close) => close() }]);
+    dlg.setActions([{ label: t('Done'), onClick: (close) => close() }]);
   }
 
   optionsView();

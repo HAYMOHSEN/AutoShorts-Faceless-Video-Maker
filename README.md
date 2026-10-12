@@ -1,4 +1,4 @@
-# AutoShorts: Faceless Video & Creator Hub
+# AutoShorts – Faceless Video Maker
 
 A Windows Store app (PWA) that turns a **topic**, a pasted **article** or **your own script** into a
 faceless vertical video (9:16) for TikTok, Instagram Reels and YouTube Shorts:
@@ -7,8 +7,15 @@ faceless vertical video (9:16) for TikTok, Instagram Reels and YouTube Shorts:
   summarised to its strongest sentences, then a hook and a call to action are added. Six formats
   (Did you know, Top list, Explainer, Story, Mystery, Motivation). Uses the browser's on-device AI
   or the user's own OpenAI-compatible key when available.
-- **AI voiceover** — 28 neural voices (Kokoro-82M) generated **on the PC**; the voice pack (about 107 MB)
-  downloads once, then works offline. Or record your own voice line by line (any language).
+- **Seven languages** — videos in English, Spanish, French, German, Portuguese (Brazil), Hindi and
+  Arabic: the script writer, captions (right-to-left for Arabic), number cards, post kit and
+  hashtags all follow the video's language, and facts come from that language's Wikipedia. The
+  interface is translated into the same seven languages (picked from the Windows language,
+  changeable in Settings › Language).
+- **AI voiceover** — 40 neural voices generated **on the PC**: Kokoro-82M speaks English (28 voices),
+  Spanish, French, Portuguese and Hindi; the voice pack (about 107 MB) downloads once, then works
+  offline. German uses a Piper voice (20 MB, separate download). Arabic videos use your own voice,
+  recorded line by line, or captions only.
 - **Visuals** — 12 animated background themes in 10 looks, the user's own photos/clips, or free
   Pexels stock footage; Ken Burns motion, transitions, emoji stickers, big number cards, title banner.
 - **Music** — 8 moods of original music synthesised on the device (royalty-free by construction),
@@ -42,8 +49,8 @@ with your other apps on `haymohsen.github.io`.
 
 ## 2. Microsoft Store setup (Partner Center)
 
-1. **Reserve the name**, e.g. `AutoShorts: Faceless Video & Creator Hub` (or `AutoShorts – Faceless Video Maker`
-   if the first isn't available).
+1. **Reserved name:** `AutoShorts – Faceless Video Maker`. The app's manifest uses exactly this name, so the package's
+   display name matches the reservation (keep the en dash).
 2. **Pricing:** Free. The app sells Pro as add-ons.
 3. **Create the Pro add-ons** (Partner Center › your app › Add-ons › Create a new add-on). The
    **Product ID must match exactly** what the app looks for:
@@ -57,7 +64,8 @@ with your other apps on `haymohsen.github.io`.
    You can create only the lifetime one — the app shows whichever add-ons exist. Give each add-on a
    title such as "AutoShorts Pro" and publish them with (or before) the app submission.
 4. **Privacy policy URL:** `https://haymohsen.github.io/AutoShorts/privacy.html`
-5. **Store listing text:** see `store/STORE-LISTING.md`. Screenshots: `store/screenshots/`.
+5. **Store listing text:** see `store/STORE-LISTING.md` (with a caption for each screenshot).
+   Screenshots: `store/screenshots/`. Store logos and hero art: `store/logos/`.
 
 ## 3. Package with PWABuilder
 
@@ -65,6 +73,8 @@ with your other apps on `haymohsen.github.io`.
 2. **Package for stores › Windows › Generate package**, with the values from Partner Center
    (Product management › Product identity):
    - Package ID: the `Package/Identity/Name` shown there (e.g. `Jotech.AutoShorts…`)
+   - App name: `AutoShorts – Faceless Video Maker` (filled in from the manifest; it must match the
+     reserved name exactly, en dash included)
    - Publisher ID: `CN=73B709AB-BF94-4318-AE43-BAAA136F59D9`
    - Publisher display name: `Jotech`
    - App version `1.0.0`, classic package version `0.9.9`
@@ -100,6 +110,13 @@ on localhost).
 ## Technical notes
 
 - Voice: Kokoro-82M (q8 ONNX, 92 MB, plus 28 voice styles, 15 MB) via kokoro-js / Transformers.js / ONNX Runtime Web, in a worker.
+  Spanish, French, Portuguese and Hindi text is turned into phonemes with eSpeak NG (WebAssembly, `vendor/espeak/`,
+  dictionaries trimmed to the app's languages) and fed to the same model. German uses the Piper voice
+  de_DE-eva_k-x_low (`js/piper-worker.js`, ONNX Runtime Web). `js/speech.js` rewrites numbers, units and
+  abbreviations the way each language says them.
+- Languages: `js/langs.js` (per-language script writer packs), `js/i18n.js` + `js/i18n/*.js` (interface
+  translations, keyed by the English text). `python3 tools/extract-i18n.py` lists every interface string
+  and checks each translation file for missing strings and placeholders.
   Settings has an option to use the graphics card (WebGPU, 326 MB model) for faster voiceovers. All voice styles are downloaded right after the model so every voice works offline.
 - Export: Mediabunny + WebCodecs. Uses H.264 + AAC when Windows provides them, otherwise VP9 / Opus.
 - Storage: IndexedDB (projects, voice clips, media). The voice model is kept in the browser cache.

@@ -3,6 +3,18 @@
 
 import { kvGet } from './db.js';
 import { importMedia } from './media.js';
+import { t } from './i18n.js';
+import { englishFor } from './emoji.js';
+
+// Pexels understands searches in these languages; Hindi and Arabic words are searched in English
+const PEXELS_LOCALE = { es: 'es-ES', fr: 'fr-FR', de: 'de-DE', pt: 'pt-BR' };
+
+function searchTerms(query, lang) {
+  const q = query.trim();
+  if (lang !== 'hi' && lang !== 'ar') return q;
+  const words = q.split(/\s+/).map((w) => englishFor(w, lang)).filter(Boolean);
+  return words.length ? [...new Set(words)].join(' ') : q;
+}
 
 // Optional: an app-wide key can be placed here so users don't need their own.
 export const APP_PEXELS_KEY = '';
@@ -12,11 +24,18 @@ export async function pexelsKey() {
   return k.trim() || APP_PEXELS_KEY;
 }
 
+// errors that stop a whole "fill every scene" run carry a code (their text is translated)
+function stopError(message, code) {
+  const e = new Error(message);
+  e.code = code;
+  return e;
+}
+
 async function api(path, key, signal) {
   const res = await fetch(`https://api.pexels.com${path}`, { headers: { Authorization: key }, signal });
-  if (res.status === 401 || res.status === 403) throw new Error('Pexels did not accept the API key. Check it in Settings.');
-  if (res.status === 429) throw new Error('Pexels limit reached for now. Try again later.');
-  if (!res.ok) throw new Error(`Pexels search failed (${res.status}).`);
+  if (res.status === 401 || res.status === 403) throw stopError(t('Pexels did not accept the API key. Check it in Settings.'), 'pexels-key');
+  if (res.status === 429) throw stopError(t('Pexels limit reached for now. Try again later.'), 'pexels-limit');
+  if (!res.ok) throw new Error(t('Pexels search failed ({status}).', { status: res.status }));
   return res.json();
 }
 
@@ -35,16 +54,18 @@ const CACHE_MS = 30 * 60 * 1000;
 const CACHE_MAX = 80;
 
 /** @returns {Promise<{kind:'video'|'photo', id, thumb, url, w, h, duration, credit}[]>} */
-export async function searchStock(query, { kind = 'video', page = 1, signal } = {}) {
+export async function searchStock(query, { kind = 'video', page = 1, signal, lang = 'en' } = {}) {
   const key = await pexelsKey();
-  if (!key) throw new Error('Add your free Pexels API key in Settings to search stock footage.');
-  const cacheKey = `${kind}|${page}|${query.trim().toLowerCase()}`;
+  if (!key) throw stopError(t('Add your free Pexels API key in Settings to search stock footage.'), 'pexels-key');
+  const terms = searchTerms(query, lang);
+  const locale = PEXELS_LOCALE[lang] && terms === query.trim() ? `&locale=${PEXELS_LOCALE[lang]}` : '';
+  const cacheKey = `${kind}|${page}|${locale}|${terms.toLocaleLowerCase()}`;
   const hit = searchCache.get(cacheKey);
   if (hit && hit.key === key && Date.now() - hit.at < CACHE_MS) return hit.items;
-  const q = encodeURIComponent(query.trim());
+  const q = encodeURIComponent(terms);
   let items;
   if (kind === 'video') {
-    const json = await api(`/videos/search?query=${q}&orientation=portrait&size=medium&per_page=15&page=${page}`, key, signal);
+    const json = await api(`/videos/search?query=${q}&orientation=portrait&size=medium&per_page=15&page=${page}${locale}`, key, signal);
     items = (json.videos || [])
       .map((v) => {
         const f = bestVideoFile(v.video_files || []);
@@ -53,7 +74,7 @@ export async function searchStock(query, { kind = 'video', page = 1, signal } = 
       })
       .filter(Boolean);
   } else {
-    const json = await api(`/v1/search?query=${q}&orientation=portrait&per_page=20&page=${page}`, key, signal);
+    const json = await api(`/v1/search?query=${q}&orientation=portrait&per_page=20&page=${page}${locale}`, key, signal);
     items = (json.photos || []).map((p) => ({ kind: 'photo', id: `pp${p.id}`, thumb: p.src.medium, url: p.src.large2x || p.src.portrait, w: p.width, h: p.height, credit: { name: p.photographer, url: p.url, source: 'Pexels' }, alt: p.alt }));
   }
   searchCache.delete(cacheKey);
@@ -65,7 +86,7 @@ export async function searchStock(query, { kind = 'video', page = 1, signal } = 
 /** Download a stock item and store it as a media asset. */
 export async function downloadStock(item, { signal } = {}) {
   const res = await fetch(item.url, { signal, mode: 'cors' });
-  if (!res.ok) throw new Error('Download failed.');
+  if (!res.ok) throw new Error(t('Download failed.'));
   const blob = await res.blob();
   const ext = item.kind === 'video' ? 'mp4' : 'jpg';
   const type = blob.type || (item.kind === 'video' ? 'video/mp4' : 'image/jpeg');
@@ -74,7 +95,7 @@ export async function downloadStock(item, { signal } = {}) {
 }
 
 /** Pick and download one stock clip per scene keyword (used by "Fill scenes with stock"). */
-export async function autoStock(scenes, { kind = 'video', signal, onProgress, topic = '' } = {}) {
+export async function autoStock(scenes, { kind = 'video', signal, onProgress, topic = '', lang = 'en' } = {}) {
   const used = new Set();
   const results = new Map();
   let done = 0;
@@ -82,8 +103,8 @@ export async function autoStock(scenes, { kind = 'video', signal, onProgress, to
     if (signal && signal.aborted) break;
     const query = (sc.keyword || topic || '').trim();
     try {
-      let items = query ? await searchStock(query, { kind, signal }) : [];
-      if (!items.length && topic && topic !== query) items = await searchStock(topic, { kind, signal });
+      let items = query ? await searchStock(query, { kind, signal, lang }) : [];
+      if (!items.length && topic && topic !== query) items = await searchStock(topic, { kind, signal, lang });
       const pick = items.find((i) => !used.has(i.id));
       if (pick) {
         used.add(pick.id);
@@ -92,7 +113,7 @@ export async function autoStock(scenes, { kind = 'video', signal, onProgress, to
       }
     } catch (e) {
       if (e.name === 'AbortError') break;
-      if (/API key|limit/i.test(e.message)) throw e;
+      if (e.code === 'pexels-key' || e.code === 'pexels-limit') throw e;
       console.warn('stock for scene failed', e);
     }
     done++;

@@ -1,9 +1,10 @@
 // Record one scene line with the microphone (teleprompter, level meter, retake).
 
 import { h, modal, clear, toast } from './ui.js';
+import { t } from './i18n.js';
 
 /** @returns {Promise<{pcm: Float32Array, sampleRate: number}|null>} */
-export function openRecorder(text) {
+export function openRecorder(text, lang = 'en') {
   return new Promise((resolve) => {
     let stream = null;
     let rec = null;
@@ -15,10 +16,10 @@ export function openRecorder(text) {
     let playing = null;
 
     const meter = h('div', { class: 'meter' }, h('i'));
-    const status = h('p', { class: 'hint', text: 'Read the line at your natural pace. Recording starts after a short countdown.' });
-    const body = h('div', { style: { display: 'grid', gap: '14px' } }, h('div', { class: 'teleprompter', text: text }), meter, status);
+    const status = h('p', { class: 'hint', text: t('Read the line at your natural pace. Recording starts after a short countdown.') });
+    const body = h('div', { style: { display: 'grid', gap: '14px' } }, h('div', { class: 'teleprompter', text: text, lang, dir: 'auto' }), meter, status);
     const dlg = modal({
-      title: 'Record this line',
+      title: t('Record this line'),
       body,
       onClose: () => {
         cleanup();
@@ -36,9 +37,9 @@ export function openRecorder(text) {
 
     function idle() {
       dlg.setActions([
-        { label: 'Cancel', onClick: (close) => close() },
-        { label: take ? 'Record again' : 'Start recording', kind: 'rec', icon: 'mic', onClick: start },
-        ...(take ? [{ label: 'Play take', icon: 'play', onClick: playTake }, { label: 'Use this take', kind: 'primary', onClick: useTake }] : []),
+        { label: t('Cancel'), onClick: (close) => close() },
+        { label: take ? t('Record again') : t('Start recording'), kind: 'rec', icon: 'mic', onClick: start },
+        ...(take ? [{ label: t('Play take'), icon: 'play', onClick: playTake }, { label: t('Use this take'), kind: 'primary', onClick: useTake }] : []),
       ]);
     }
 
@@ -46,7 +47,7 @@ export function openRecorder(text) {
       try {
         if (!stream) stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
       } catch (e) {
-        status.textContent = 'Microphone access was blocked. Allow the microphone for AutoShorts in Windows Settings › Privacy › Microphone, then try again.';
+        status.textContent = t('Microphone access was blocked. Allow the microphone for AutoShorts in Windows Settings › Privacy › Microphone, then try again.');
         return;
       }
       if (!actx) actx = new AudioContext();
@@ -63,9 +64,9 @@ export function openRecorder(text) {
         raf = requestAnimationFrame(tick);
       };
       tick();
-      dlg.setActions([{ label: 'Cancel', onClick: (close) => close() }]);
+      dlg.setActions([{ label: t('Cancel'), onClick: (close) => close() }]);
       for (const n of [3, 2, 1]) {
-        status.textContent = `Recording in ${n}…`;
+        status.textContent = t('Recording in {n}…', { n });
         await new Promise((r) => setTimeout(r, 650));
       }
       chunks = [];
@@ -74,8 +75,8 @@ export function openRecorder(text) {
       rec.onstop = finish;
       rec.start();
       clear(status);
-      status.append(h('span', { class: 'rec-dot' }), ' Recording — press Stop when you finish the line.');
-      dlg.setActions([{ label: 'Stop', kind: 'rec', icon: 'stop', onClick: () => rec.state !== 'inactive' && rec.stop() }]);
+      status.append(h('span', { class: 'rec-dot' }), ' ' + t('Recording — press Stop when you finish the line.'));
+      dlg.setActions([{ label: t('Stop'), kind: 'rec', icon: 'stop', onClick: () => rec.state !== 'inactive' && rec.stop() }]);
     }
 
     async function finish() {
@@ -92,7 +93,7 @@ export function openRecorder(text) {
         let peak = 0;
         for (const v of pcm) peak = Math.max(peak, Math.abs(v));
         if (peak < 0.01) {
-          status.textContent = 'That take was silent. Check the microphone and try again.';
+          status.textContent = t('That take was silent. Check the microphone and try again.');
           take = null;
           idle();
           return;
@@ -100,9 +101,9 @@ export function openRecorder(text) {
         const g = Math.min(8, 0.9 / peak);
         for (let i = 0; i < pcm.length; i++) pcm[i] *= g;
         take = { pcm, sampleRate: buf.sampleRate };
-        status.textContent = `Take recorded (${(pcm.length / buf.sampleRate).toFixed(1)}s). Play it back or use it.`;
+        status.textContent = t('Take recorded ({s}s). Play it back or use it.', { s: (pcm.length / buf.sampleRate).toFixed(1) });
       } catch (e) {
-        status.textContent = 'Could not read that recording. Try again.';
+        status.textContent = t('Could not read that recording. Try again.');
         take = null;
       }
       idle();
@@ -123,7 +124,7 @@ export function openRecorder(text) {
     function useTake(close) {
       result = take;
       close();
-      toast('Recording added to the scene');
+      toast(t('Recording added to the scene'));
     }
 
     idle();
