@@ -6,7 +6,9 @@ import os, re
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 SKIP_DIRS = {'tools', '_dev', '.git', 'screenshots', 'store'}
 SKIP_FILES = {'sw.js', 'README.md', 'LICENSES.md'}
-LAZY = ('vendor/kokoro.web.js', 'vendor/ort/', 'icons/icon-1024.png')
+# fetched on first use and kept in the runtime cache: the voice engines and the phonemizer for
+# the non-English voices
+LAZY = ('vendor/kokoro.web.js', 'vendor/ort/', 'vendor/espeak/', 'icons/icon-1024.png')
 
 files = ['./', './index.html']
 for dirpath, dirnames, filenames in os.walk(ROOT):
